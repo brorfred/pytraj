@@ -18,7 +18,13 @@ from hitta import GBRY
 import projmaps, anim
 import trm
 import batch
-import figpref
+
+try:
+    import figpref
+    USE_FIGPREF = True
+except:
+    USE_FIGPREF = False
+
 import mycolor
 
 miv = np.ma.masked_invalid
@@ -249,7 +255,7 @@ class Matrix(trm.Trm):
         if not hasattr(self,'lon'):
             self.ijll()
 
-        figpref.presentation()
+        if USE_FIGPREF: figpref.presentation()
         pl.close(1)
         pl.figure(1,(10,10))
 

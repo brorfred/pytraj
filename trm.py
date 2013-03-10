@@ -39,6 +39,12 @@ class Trm(Traj):
     """
 
     def __init__(self,projname, casename=None, **kwargs):
+
+        self.__dict__['part'] = None
+        self.__dict__['rank'] = None
+        self.__dict__['arg1'] = None
+        self.__dict__['arg2'] = None
+        
         super(Trm, self).__init__(projname, casename, **kwargs)
         if not hasattr(self, 'trmdir'):
             self.trmdir = os.getenv('TRMDIR')
@@ -103,7 +109,7 @@ class Trm(Traj):
             filename = ("%s%08i_%s.%s" % (self.datafile,intstart,
                                           ftype,stype))
         elif filename == '':
-            filename = "%s_%s.%s" % (self.currfile()[:-8],ftype,stype) 
+            filename = "%s_%s.%s" % (self.currfile[:-8],ftype,stype) 
          
         if filename[-3:] == "bin":
             runtraj = self.read_bin(self.datadir + filename)
@@ -231,6 +237,7 @@ class Trm(Traj):
                                (i+1, j+1, k+1,3,0,50))
         f.close()
 
+    @property
     def currfile(self, ftype='run', stype='bin'):
         flist = glob.glob("%s/%s*%s.%s" %
                           (self.datadir,self.nlrun.outDataFile,
@@ -241,7 +248,10 @@ class Trm(Traj):
 
     def parse_filename(self,filename):        
         """Extract info about file from filename"""
+        filename = os.path.basename(filename)
         fdict = {}
+        arglist   = ['part','rank','arg1','arg2']
+        for a in arglist: fdict[a] = -999
         plist = filename[len(self.nlrun.outDataFile)+1:].split('_')
         fdict['ftype'],fdict['stype'] = plist[-1].split('.')
         for n in plist[:-1]:
@@ -257,7 +267,6 @@ class Trm(Traj):
                     fdict['stuff'] = n
         return fdict
 
-
     def list_partfiles(self, jdstart=None, intstart=None, rank=None,
                        filename='', stype='bin'):
         """ Create list of all parts of a file"""
@@ -268,13 +277,13 @@ class Trm(Traj):
         elif intstart != None:
             filepref = "%s%08i" % (self.datafile, intstart)
         elif filename == '':
-            fnlist = self.currfile().split('_')
+            fnlist = self.currfile.split('_')
             if len(fnlist) < 3:
-                return list(self.currfile())
+                return list(self.currfile)
             else:
                filepref = "_".join(fnlist[:-2])
         else:
-            filepref = "_".join(self.currfile().split('_')[:-2])
+            filepref = "_".join(self.currfile.split('_')[:-2])
         flist = glob.glob("%s/%s_*_run.%s"% (self.datadir, filepref, stype))
         return [os.path.basename(f) for f in flist]
 
@@ -284,16 +293,90 @@ class Trm(Traj):
                               (self.datadir, self.nlrun.outDataFile, tp))
             self.__dict__[tp + "files"] = flist
 
-    def listfiles(self):
+    def gen_filelists(self, part=None, rank=None, arg1=None, arg2=None):
         """ Create list of all output files connected to current case"""
-        for tp in ['run','err','in','out','kll']:
+        arglist   = ['part','rank','arg1','arg2']
+        ftypelist = ['run','err','in','out','kll']
+        for tp in ftypelist:
             flist = glob.glob("%s/%s*_%s.*"%
                               (self.datadir, self.nlrun.outDataFile, tp))
             self.__dict__[tp + "files"] = flist
+        self.filedict = {}
+        tmpdict = {}
+        for a in arglist: tmpdict[a] = []
+        for f in self.runfiles:
+            fd = self.parse_filename(f)
+            for a in arglist:
+                tmpdict[a].append(fd[a] if a in fd.keys() else -999)
+            self.filedict[f] = fd
+        if len(self.runfiles) > 0:
+            for a in arglist: setattr(self, 'file%ss'%a, np.array(tmpdict[a]))
+            mask = self.fileparts == self.fileparts
+            for a,i in zip(arglist, [part, rank, arg1, arg2]):
+                if i is not None:
+                    mask = mask & (self.__dict__['file%ss'%a] == i)
+            for a in arglist:
+                setattr(self, 'file%ss'%a, self.__dict__['file%ss'%a][mask])
+            for tp in ftypelist:
+                flist =  self.__dict__[tp + "files"]
+                if len(flist) == len(mask):
+                    self.__dict__[tp + "files"] = list(np.array(flist)[mask])
+
+    @property
+    def part(self):
+        return  self.__dict__['part']
+    @part.setter
+    def part(self, val):
+        self.gen_filelists(part=val, rank=self.rank, arg1=self.arg1,
+                           arg2=self.arg2)
+        self.__dict__['part'] = val
+    @property
+    def partvec(self):
+        if not hasattr(self, 'fileparts'): self.gen_filelists()
+        return np.unique(self.fileparts)
+
+    @property
+    def rank(self):
+        return  self.__dict__['rank']
+    @rank.setter
+    def rank(self, val):
+        self.gen_filelists(part=self.part, rank=val, arg1=self.arg1,
+                           arg2=self.arg2)
+        self.__dict__['rank'] = val
+    @property
+    def rankvec(self):
+        if not hasattr(self, 'fileranks'): self.gen_filelists()
+        return np.unique(self.fileranks)
+
+    @property
+    def arg1(self):
+        return  self.__dict__['arg1']
+    @arg1.setter
+    def arg1(self, val):
+        self.gen_filelists(part=self.part, rank=self.rank, arg1=val,
+                           arg2=self.arg2)
+        self.__dict__['arg1'] = val
+    @property
+    def arg1vec(self):
+        if not hasattr(self, 'filearg1s'): self.gen_filelists()
+        return np.unique(self.filearg1s)
+
+    @property
+    def arg2(self):
+        return  self.__dict__['arg2']
+    @arg2.setter
+    def arg2(self, val):
+        self.gen_filelists(part=self.part, rank=self.rank, arg1=self.arg1,
+                           arg2=val)
+        self.__dict__['arg2'] = val
+    @property
+    def arg2vec(self):
+        if not hasattr(self, 'filearg2s'): self.gen_filelists()
+        return np.unique(self.filearg2s)
             
     @property
     def ls(self):
-        self.listfiles()
+        self.gen_filelists()
         for f in self.runfiles: print f
 
     def __str__(self):
@@ -307,6 +390,10 @@ class Trm(Traj):
         if hasattr(self.nlrun, 'seedparts'):
             print "%s : %i" % ("seedparts".rjust(15),  self.nlrun.seedparts)
             print "%s : %i" % ("seedpart_id".rjust(15),self.nlrun.seedpart_id)
+
+        for a in ['part','rank','arg1','arg2']:
+            if self.__dict__[a] is not None:
+                print "%s : %i" % (a.rjust(15),  self.__dict__[a])
 
         if hasattr(self,'x'):
             print ""

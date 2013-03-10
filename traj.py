@@ -5,9 +5,14 @@ import numpy as np
 import pylab as pl
 import matplotlib as mpl
 
-import anim
-from hitta import GrGr
-import figpref
+#import anim
+#from hitta import GrGr
+
+try:
+    import figpref
+    USE_FIGPREF = True
+except:
+    USE_FIGPREF = False
 
 import lldist
 from postgresql import DB
@@ -230,7 +235,7 @@ class Traj(object):
             if ntrac is not None:
                 mask = mask & (self.ntrac==ntrac)
 
-        figpref.current()
+        if USE_FIGPREF: figpref.current()
         if clf: pl.clf()
     
         if coord is "latlon":
