@@ -90,8 +90,8 @@ class Traj(object):
     def ijll(self):
         """Add vectors with lat-lon positions of particles."""
         from scipy.ndimage.interpolation import map_coordinates
-        self.lon = map_coordinates(self.llon, [self.y,self.x])
-        self.lat = map_coordinates(self.llat, [self.y,self.x])
+        self.lon = map_coordinates(self.llon, [self.y-0.5, self.x-0.5])
+        self.lat = map_coordinates(self.llat, [self.y-0.5, self.x-0.5])
         self.lon[self.lon<-180] = self.lon[self.lon<-180] + 360
         self.lon[self.lon> 180] = self.lon[self.lon> 180] - 360
         self.lon[self.lon==0] = np.nan
