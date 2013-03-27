@@ -5,33 +5,40 @@ import numpy as np
 import pylab as pl
 import matplotlib as mpl
 
-#import anim
-#from hitta import GrGr
+import anim
 
+try:
+    from hitta import GrGr
+    GR_CMAP = GrGr()
+except:
+    GR_CMAP = mpl.cm.gray
+    
 try:
     import figpref
     USE_FIGPREF = True
 except:
     USE_FIGPREF = False
-
+try:
+    from postgresql import DB
+    USE_POSTGRES = True
+except:
+    USE_POSTGRES = False
 import lldist
-from postgresql import DB
 
 class Traj(object):
     """Main class for trajectory post-processing"""
     def __init__(self, projname, casename=None, **kwargs):
         """ Setup variables and make sure everything needed is there """
         self.projname = projname
-        self.basedir =  os.path.dirname(os.path.abspath(__file__))
+        self.basedir  = os.path.dirname(os.path.abspath(__file__))
         self.inkwargs = kwargs
-        if casename is None:
-            self.casename = projname
-        else:
-            self.casename = casename
-        self._load_presets('projects',kwargs)
-
-        self.setup_njord()
-
+        self.casename = projname if casename is None else casename
+        self._load_presets('pytraj_projects',kwargs)
+        for key,val in self.inkwargs.iteritems(): self.__dict__[key] = val
+        if self.use_njord: self.setup_njord()
+        self.llon[self.llon<-180] = self.llon[self.llon<-180] + 360
+        self.llon[self.llon> 180] = self.llon[self.llon> 180] - 360
+        
     def _load_presets(self, filepref, kwargs):
         """Read and parse the config file"""
         cfg = ConfigParser.ConfigParser()
@@ -46,6 +53,7 @@ class Traj(object):
         else:
             print "Project not included in config file"
             print "Geo-reference functionality will be limited"
+            self.use_njord = False
             return
         
         def splitkey(key, val):
@@ -74,6 +82,8 @@ class Traj(object):
         def bFunc( *args, **kw ):
             if not "x" in dir(args[0]):
                 raise NameError, "Trajectory data not loaded."
+            if len(args[0].x) == 0:
+                raise ValueError, "Trajectory data empty."
             return aFunc( *args, **kw )
         bFunc.__name__ = aFunc.__name__
         bFunc.__doc__ = aFunc.__doc__
@@ -97,8 +107,6 @@ class Traj(object):
         from scipy.ndimage.interpolation import map_coordinates
         self.lon = map_coordinates(self.llon, [self.y-0.5, self.x-0.5])
         self.lat = map_coordinates(self.llat, [self.y-0.5, self.x-0.5])
-        self.lon[self.lon<-180] = self.lon[self.lon<-180] + 360
-        self.lon[self.lon> 180] = self.lon[self.lon> 180] - 360
         self.lon[self.lon==0] = np.nan
         self.lat[self.lat==0] = np.nan
 
@@ -172,23 +180,18 @@ class Traj(object):
         """ Create a subset of trajectories based on a vector of ntrac's"""
         ntracvec = np.array(ntracvec)
         ntracmax = ntracvec.max()
-        convec = np.zeros((ntracmax+1)).astype(np.bool)
-        convec[ntracvec] = True
-        mask = convec.copy()
-        nmask = self.ntrac <= ntracmax
+        mask = np.zeros((ntracmax+1)).astype(np.bool)
+        mask[ntracvec] = True
+        maxmask = self.ntrac <= ntracmax
         ntracmask = (self.ntrac[:] * 0).astype(np.bool)
-
         for jd in self.jdvec:
-            tmask = (self.jd == jd) & nmask
-            convec[:] = False
-            convec[self.ntrac[tmask]] = True
-            tempmask = ntracmask[tmask]
-            tempmask[np.nonzero((convec & mask))[0]-1] = True
-            ntracmask[tmask] = tempmask
+            tmask = (self.jd == jd) & maxmask
+            convec = mask * False
+            convec[self.ntrac[tmask]] = mask[self.ntrac[tmask]]
+            ntracmask[tmask] = convec[self.ntrac[tmask]]
         subvars = ['ntrac','jd','x','y','z'] + extra_vars
         for v in subvars:
             self.__dict__[v] = self.__dict__[v][ntracmask]
-
 
     @trajsloaded
     def insert(self, database="traj"):
@@ -209,7 +212,7 @@ class Traj(object):
     def scatter(self,mask=None, ntrac=None, jd=None, k1=None, k2=None,
                 c="g", clf=True, coord="latlon", land="nice", map_region=None):
         """Plot particle positions on a map
-
+                 
                  mask: Boolean vector inidcating which particles to plot
                 ntrac: Particle ID
                    jd: Julian date to plot, has to be included in jdvec.
@@ -249,13 +252,15 @@ class Traj(object):
         elif coord is "latlon":
             self.mp.pcolormesh(self.mpxll,
                                self.mpyll,
-                               np.ma.masked_equal(self.landmask, False),
-                               cmap=GrGr())
+                               np.ma.masked_equal(self.landmask, True),
+                               cmap=GR_CMAP)
         else:
             pl.pcolormesh(np.arange(self.gcm.i1, self.gcm.i2+1),
                           np.arange(self.gcm.j1, self.gcm.j2+1),
-                          np.ma.masked_equal(self.landmask, False),
-                          cmap=GrGr())
+                          np.ma.masked_equal(self.landmask, True),
+                          cmap=GR_CMAP)
+            pl.xlim(0, self.imt)
+            pl.ylim(0, self.jmt)
         if (ntrac is not None) & (coord is "latlon"):
             self.mp.plot(x,y,'-w',lw=0.5)
 
