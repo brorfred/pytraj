@@ -44,7 +44,6 @@ class Trm(Traj):
         self.__dict__['rank'] = None
         self.__dict__['arg1'] = None
         self.__dict__['arg2'] = None
-        
         super(Trm, self).__init__(projname, casename, **kwargs)
         if not hasattr(self, 'trmdir'):
             self.trmdir = os.getenv('TRMDIR')
@@ -99,7 +98,8 @@ class Trm(Traj):
                 self.firstjd = self.lastjd = self.jdrange = 0
                 
     def load(self, ftype="run", stype='bin', part=None, filename='',
-             jdstart=0, intstart=0, rawdata=False, nogmt=False):
+             jdstart=0, intstart=0, rawdata=False, nogmt=False,
+             partappend=True):
         """Load a tracmass output file. Add data to class instance."""
         if jdstart != 0:
             ints = (jdstart+self.base_iso) * 24./self.nlgrid.ngcm  + 1
@@ -110,14 +110,23 @@ class Trm(Traj):
                                           ftype,stype))
         elif filename == '':
             filename = "%s_%s.%s" % (self.currfile[:-8],ftype,stype) 
-         
-        if filename[-3:] == "bin":
-            runtraj = self.read_bin(self.datadir + filename)
-        elif filename[-3:] == "asc":
-            runtraj = self.read_asc(self.datadir + filename)
+
+        def readfile(filename):
+            if filename[-3:] == "bin":
+                return self.read_bin(self.datadir + filename)
+            elif filename[-3:] == "asc":
+                return self.read_asc(self.datadir + filename)
+            else:
+                raise IOError, "Unknown file format, file should be bin or asc"
+                    
+        partlist = self.list_partfiles(filename)
+        if (len(partlist) > 1) & (partappend is True):
+            runtraj = np.array([], dtype=self.dtype)
+            for fname in partlist:
+                runtraj = np.concatenate((runtraj, readfile(fname)))
         else:
-            print "Unknown file format, data file should be bin or asc"
-            raise
+            runtraj = readfile(filename)
+
         if rawdata is True: self.runtraj = runtraj
         self.filename = filename
         tvec = ['ntrac', 'ints', 'x', 'y', 'z']
@@ -145,7 +154,7 @@ class Trm(Traj):
         else:
             self.jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
         self.jdvec = np.unique(self.jd)
-        if hasattr(self,'lon'):self.ijll()
+        if hasattr(self,'lon'): self.ijll()
 
     @Traj.trajsloaded
     def fld2trajs(self, fieldname, mask=None, k=0):
@@ -267,31 +276,15 @@ class Trm(Traj):
                     fdict['stuff'] = n
         return fdict
 
-    def list_partfiles(self, jdstart=None, intstart=None, rank=None,
-                       filename='', stype='bin'):
+    def list_partfiles(self, filename=None):
         """ Create list of all parts of a file"""
-        if jdstart is not None:
-            ints = (jdstart+self.base_iso) * 24./self.nlgrid.ngcm  + 1
-            filepref = "%s%08i" % (self.datafile, ints)
-            self.jd = jdstart
-        elif intstart != None:
-            filepref = "%s%08i" % (self.datafile, intstart)
-        elif filename == '':
-            fnlist = self.currfile.split('_')
-            if len(fnlist) < 3:
-                return list(self.currfile)
-            else:
-               filepref = "_".join(fnlist[:-2])
-        else:
-            filepref = "_".join(self.currfile.split('_')[:-2])
-        flist = glob.glob("%s/%s_*_run.%s"% (self.datadir, filepref, stype))
-        return [os.path.basename(f) for f in flist]
+        if filename is None: 
+            filename = self.currfile
+        globname = '_'.join(['p*' if p[0] is 'p' else
+                             p for p in filename.split('_') ])
+        return [os.path.basename(g)
+                for g in glob.glob(os.path.join(self.datadir,globname))]
 
-        
-        for tp in ['run','err','in','out','kll']:
-            flist = glob.glob("%s/%s*_%s.*"%
-                              (self.datadir, self.nlrun.outDataFile, tp))
-            self.__dict__[tp + "files"] = flist
 
     def gen_filelists(self, part=None, rank=None, arg1=None, arg2=None):
         """ Create list of all output files connected to current case"""
