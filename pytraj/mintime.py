@@ -19,7 +19,7 @@ import lldist
 
 miv = np.ma.masked_invalid
 
-class MinTimeMatrix(connect.Matrix):
+class MinTimeMatrix(connect.ConnectionMatrix):
 
     def __init__(self,projname,casename="", **kwargs):
         super(Global,self).__init__(projname, casename, **kwargs)

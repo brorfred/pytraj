@@ -70,6 +70,9 @@ class Trm(Traj):
         self.imt = self.nlgrid.IMT
         self.jmt = self.nlgrid.JMT
 
+        if not os.path.isabs(self.datadir):
+            self.datadir = os.path.join(self.trmdir, self.datadir)
+
     @property
     def dtype(self):
         return np.dtype([('ntrac','i4'), ('ints','f8'), 

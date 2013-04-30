@@ -24,5 +24,5 @@ setup(name = 'pytraj',
                   "njord(>=0.5)",
                   ],
       packages = ['pytraj'],
-      package_data = {'pytraj': ['projects.cfg']},
+      package_data = {'pytraj': ['pytraj_projects.cfg']},
      )

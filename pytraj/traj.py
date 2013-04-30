@@ -36,8 +36,9 @@ class Traj(object):
         self._load_presets('pytraj_projects',kwargs)
         for key,val in self.inkwargs.iteritems(): self.__dict__[key] = val
         if self.use_njord: self.setup_njord()
-        self.llon[self.llon<-180] = self.llon[self.llon<-180] + 360
-        self.llon[self.llon> 180] = self.llon[self.llon> 180] - 360
+        if hasattr(self, 'llon'):
+            self.llon[self.llon<-180] = self.llon[self.llon<-180] + 360
+            self.llon[self.llon> 180] = self.llon[self.llon> 180] - 360
         
     def _load_presets(self, filepref, kwargs):
         """Read and parse the config file"""
@@ -125,7 +126,8 @@ class Traj(object):
         if len(weights) == 0: weights = np.ones(xy.shape[1])
         flat_coord = np.ravel_multi_index(xy, (self.imt, self.jmt))
         sums = np.bincount(flat_coord, weights)
-        fld = np.zeros((self.imt, self.jmt))
+        sums[sums==0] = np.nan
+        fld = np.zeros((self.imt, self.jmt)) * np.nan
         fld.flat[:len(sums)] = sums
         return fld.T
 

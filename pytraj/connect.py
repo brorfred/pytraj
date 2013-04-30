@@ -29,7 +29,7 @@ import mycolor
 
 miv = np.ma.masked_invalid
 
-class Matrix(trm.Trm):
+class ConnectionMatrix(trm.Trm):
     """ Class to handle connectivity matrices from trajectories
 
     This class generates connectivity matrices from defined regions
