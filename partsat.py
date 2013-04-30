@@ -1,4 +1,4 @@
-import sys
+import os
 import datetime
 import glob
 from datetime import datetime as dtm
@@ -8,20 +8,21 @@ import numpy as np
 import pylab as pl
 import scipy.io
 from matplotlib.colors import LogNorm
+import tables as td
 
-from hitta import GBRY
+from hitta import GBRY, WRY
 import projmaps, anim
-import trm, postgresql
+import pytraj
+import postgresql
 import batch
 
 miv = np.ma.masked_invalid
 
-class Partsat(trm.Trm, postgresql.DB):
+class Partsat(pytraj.Trm, postgresql.DB):
 
-    def __init__(self,projname,casename="", datadir="",
-                 datafile="", ormdir="", griddir='/projData/GOMPOM/'):
-        super(Partsat,self).__init__(projname,casename,datadir,datafile,ormdir)
-        postgresql.DB.__init__(self, projname,casename,database='partsat')
+    def __init__(self,projname,casename="", **kwargs):
+        super(Partsat,self).__init__(projname, casename, *kwargs)
+        postgresql.DB.__init__(self, projname, casename, database='partsat')
 
         self.flddict = {'par':('L3',),'chl':('box8',)}
         if projname == 'oscar':
@@ -48,8 +49,45 @@ class Partsat(trm.Trm, postgresql.DB):
             import mati
             self.sat = mati.Cal()
 
+    def map2grid(self, vec):
+        """ Create map of average change in tracer """
+        fld = self.grid(vec)
+        cnt = self.grid()
+        return fld/cnt
+
+    def select(self,field="chl", jd=734107):
+        """ Get the interpolated tracer for all trajectories at jd=jd"""
+        dtype = np.dtype([('t1',np.float), ('t2',np.float),
+                          ('val1',np.float), ('val2',np.float),
+                          ('x',np.float),  ('y',np.float)])
+        sql = """SELECT c.ints as t1,   c2.ints as t2,
+                        c.val  as val1, c2.val  as val2,
+                        t.x, t.y FROM %s__%s c
+                    INNER JOIN %s__%s c2 ON
+                            c.runid=c2.runid AND c.ntrac=c2.ntrac
+                    INNER JOIN %s t ON c.runid=t.runid AND c.ntrac=t.ntrac
+                  WHERE c.ints > %i AND  c.ints <= %i AND
+                          c2.ints > %i AND c2.ints < %i AND t.ints=%i;"""
+        self.c.execute(sql % (self.tablename, field, self.tablename, field,
+                              self.tablename, jd-10, jd, jd, jd+10, jd))
+        self.res = np.array(self.c.fetchall(), dtype=dtype)
+        if len(self.res)==0: return False
+        dt =  (self.res['t2'] - self.res['t1'])
+        r1 = (self.res['t2'] - jd) / dt
+        r2 = (jd - self.res['t1']) / dt
+        setattr(self, field+'vec', self.res['val2']*r1 + self.res['val1'] * r2)
+        self.x = self.res['x']
+        self.y = self.res['y']
+        setattr(self, field, self.map2grid(getattr(self, field+'vec')))
+        return True
+
+
     def sat_trajs(self,jd,field,pos='start'):
-        """Retrive x-y pos and start-end values for trajs""" 
+        """Retrive x-y pos and start-end values for trajs
+
+        Functionality replaced by 'select
+
+        '""" 
         if pos == 'start':
             t1str = " AND t.ints=t1.ints "; t2str = ""
         else:
@@ -224,49 +262,72 @@ class Partsat(trm.Trm, postgresql.DB):
         
         return svec
 
+    def calc__z_eu(self, chl):
+        """ Calculate euphotic depth from chl with Morel's Case I model"""
+        chl_tot = 40.2 * chl**0.507
+        mask = chl < 1
+	chl_tot[mask] = 38.0 * chl[mask]**0.425
+        z_eu = 200.0 * chl_tot**-0.293
+        mask = z_eu <= 102.0
+        z_eu[mask] = 568.2 * chl_tot[mask]**-0.746
+        return z_eu
+
 
 class DeltaField(Partsat):
     """ Calculate change in tracer from one day to another """
-    def __init__(self,projname,casename="", datadir="",
-                 datafile="", ormdir="", griddir='/projData/GOMPOM/'):
-        Partsat.__init__(self,projname,casename,datadir,datafile,ormdir)
-
-    def select(self,field="chl", jd=734107):
+    def __init__(self,projname, casename="", **kwargs):
+        Partsat.__init__(self,projname,casename,**kwargs)
+        self.jdmin = 733773.25
+        self.jdmax = 734137.75
+        self.djd = 1.
+        self.h5dir = "./"
+        
+    def select(self,field="Dchl", jd=734107):
         """ Get the change in tracer for all trajectories at jd=jd"""
-        sql = """SELECT c2.ints-c.ints as dt, c.val as val1,c2.val as val2,
+        if field[0] is not "D":
+            return super(DeltaField,self).select(field, jd)
+        field = field[1:]
+        dtype = np.dtype([('dt',np.float),('val1',np.float),('val2',np.float),
+                          ('x',np.float), ('y',np.float)])
+        sql = """SELECT c2.ints-c.ints as dt, c.val as val1, c2.val as val2,
                         t.x, t.y FROM %s__%s c
                     INNER JOIN %s__%s c2 ON
                             c.runid=c2.runid AND c.ntrac=c2.ntrac
                     INNER JOIN %s t ON c.runid=t.runid AND c.ntrac=t.ntrac
                   WHERE c.ints > %i AND  c.ints <= %i AND
                           c2.ints > %i AND c2.ints < %i AND t.ints=%i;"""
-        #print (sql % (self.tablename, field, self.tablename, field,
-        #                      self.tablename, jd-10, jd, jd, jd+10, jd))
         self.c.execute(sql % (self.tablename, field, self.tablename, field,
                               self.tablename, jd-10, jd, jd, jd+10, jd))
-        res = zip(*self.c.fetchall())
-        if len(res)==0: return False
-        for n,a in enumerate(['dt', 'val1', 'val2', 'x', 'y']):
-            self.__dict__[a] = np.array(res[n])
-        self.diff = (self.val2-self.val1)/self.dt
-        return True
-    
-    def map2grid(self, field="chl",jd=734107):
-        """ Create map of average change in tracer """
-        success = self.select(field=field, jd=jd)
-        if not success:
-             self.dfld = self.llat * np.nan
-             return
-        dfld = self.map(self.diff)
-        dcnt = self.map()
-        self.dfld = dfld/dcnt
+        self.res = np.array(self.c.fetchall(), dtype=dtype)
+        if len(self.res)==0: return False
 
-    def pcolor(self, field, jd=None):
+        field = 'D' + field 
+        setattr(self, field + 'vec', (self.res['val2'] - self.res['val1']) /
+                                self.res['dt'])
+        self.x = self.res['x']
+        self.y = self.res['y']
+        setattr(self, field, self.map2grid(getattr(self, field + 'vec')))
+        return True
+
+    def get_ncp(self, jd=734107):
+        """ get NCP from database"""
+        if self.select('Dchl', jd=jd):
+            z_eu = self.calc__z_eu(self.res['val1'])
+            self.ncpvec = self.Dchlvec * z_eu * 71.3 / 12
+            self.ncpvec[(self.ncpvec<-5000) | (self.ncpvec>5000)] = np.nan
+            self.ncp = self.map2grid(self.ncpvec)
+
+    def pcolor(self, field, jd=None,oneside=False):
         """Plot a map of a field using projmap"""
         self.add_mp()
         pl.clf()
         pl.subplot(111,axisbg='0.9')
-        self.mp.pcolormesh(self.mpxll,self.mpyll,miv(field), cmap=GBRY())
+        if oneside:
+            cmap = WRY()
+        else:
+            cmap = GBRY()
+        self.mp.pcolormesh(self.mpxll,self.mpyll,miv(field), rasterized=True,
+                           cmap=cmap)
         self.mp.nice()
         if jd: pl.title(pl.num2date(jd).strftime("%Y-%m-%d"))
         pl.clim(-10,10)
@@ -278,23 +339,57 @@ class DeltaField(Partsat):
         for jd in np.arange(jd1,jd2+1):
             t1 = dtm.now()
             print "Images left: ", jd2-jd
-            self.map(field=field, jd=jd)
+            self.map2grid(field=field, jd=jd)
             self.pcolor(self.dfld, jd)
             mv.image()
             print "Delta time: ", dtm.now() - t1
         mv.video(self.projname + "_" + field + "_mov.mp4",r=2)
+
+    def h5array(self, field='Dchl'):
+        """Create a tables array with gridded daily tracer changes"""
+        self.h5open(field)
+        for n,jd in enumerate(np.arange(self.jdmin, self.jdmax+1)):
+            t1 = dtm.now()
+            print "Images left: ", self.jdmax-jd
+            if self.select(field=field, jd=jd):
+                tpos = np.nonzero(self.h5f.root.jdvec==jd)[0][0]
+                self.h5field[tpos,:,:] = getattr(self, field)
+                print tpos
+            print "Delta time: ", dtm.now() - t1
+        self.h5close()
+        
+    def h5open(self, field):
+        self.h5filename = os.path.join(self.h5dir,"partsat_%s_%s.h5" %
+                                       (self.projname, self.casename))
+        self.h5f = h5f = td.openFile(self.h5filename, 'a')
+        jdvec = int((self.jdmax-self.jdmin+1)/self.djd)+1
+        shape = (jdvec, self.jmt, self.imt)
+        fatom = td.FloatCol()
+        filtr = td.Filters(complevel=5, complib='zlib')
+        crc = h5f.createCArray
+        if not hasattr(h5f.root,  'jdvec'):
+            jdvec = crc(h5f.root, 'jdvec',  fatom, (shape[0],))
+            jdvec[:] = np.arange(self.jdmin, self.jdmax+1, self.djd)
+        if not hasattr(h5f.root, field):
+            fieldmat = crc(h5f.root, field, fatom,  shape, filters=filtr)
+        self.h5field = self.h5f.root._f_getChild(field)
+
+    def h5close(self):
+        if not hasattr(self, 'h5f'): return
+        self.h5f.close()
+        del self.h5f
+        del self.h5filename
 
     def histmoeller(self,fldname):
         """Create a hofmoeller representation of diff distributions"""
         sql = "SELECT min(ints),max(ints) FROM jplnowfull;"
         self.c.execute(sql)
         [jdmin,jdmax] = self.c.fetchall()[0]
-        jdvec = np.arange(jdmin,jdmax)
-        #hpos = np.linspace(np.log(0.001),np.log(100),100)
+        self.jdvec = np.arange(jdmin,jdmax)
         self.hpos = np.linspace(0, 100, 100)
         self.posmat = np.zeros((len(jdvec), len(self.hpos)-1))
         self.negmat = np.zeros((len(jdvec), len(self.hpos)-1))
-        for n,jd in enumerate(jdvec[:25]):
+        for n,jd in enumerate(self.jdvec):
             if not self.select(fldname,jd=jd): continue
             diff = (self.val2-self.val1)/self.dt
             self.negmat[n,:],_ = np.histogram(-diff[diff<0], self.hpos)
@@ -324,28 +419,53 @@ class DeltaField(Partsat):
             self.navglog.append(np.mean(np.log(-self.diff[self.diff<0])))
             self.navglin.append(np.mean(-self.diff[self.diff<0]))
 
-
-
     def cumcum(self, vec):
         """Create a interpolated 'hypsograph' from a vector"""
+        vec = vec[~np.isnan(vec)]
         xi = np.linspace(0,1,100)
         xvec = np.arange(len(vec)).astype(np.float)/len(vec)
-        yvec = np.cumsum(np.sort(vec).astype(np.float)/sum(vec))
+        yvec = np.cumsum(np.sort(vec)[::-1].astype(np.float)/sum(vec))
         yi = np.interp(xi, xvec, yvec)
         return xi,yi
+
+    def cumpos(self, vec, pos=0.1):
+        """ Blaaaa"""
+        vec = vec[~np.isnan(vec)]
+        xvec = np.arange(len(vec)).astype(np.float)/len(vec)
+        yvec = np.cumsum(np.sort(vec)[::-1].astype(np.float)/sum(vec))
+        return np.interp(pos, xvec, yvec)
+
 
     def cumcumplot(self, fldname, jd=734107):
         """Plot a 'hypsograph of the relative distribution of diffs"""
         self.select(fldname, jd=jd)
         pl.clf()
-        pl.plot(*self.hypso(abs(np.random.rand(500000))))
-        pl.plot(*self.hypso(abs(np.random.randn(500000))))
-        pl.plot(*self.hypso(-diff[diff<0]))
-        pl.plot(*self.hypso(diff[diff>0])) 
+        pl.plot(*self.cumcum(abs(np.random.rand(500000))))
+        pl.plot(*self.cumcum(abs(np.random.randn(500000))))
+        pl.plot(*self.cumcum(-self.diff[self.diff<0]))
+        pl.plot(*self.cumcum( self.diff[self.diff>0])) 
         pl.xlim(0,1)
         pl.ylim(0,1)
+        pl.title("%s %s" % (fldname, pl.num2date(jd).strftime('%Y-%m-%d')))
         pl.legend(('Random values, symetrical', 'Random values, gaussian',
                    'Trajs, increasing values','Trajs, decreasing values'))
+        pl.savefig('figs/cumcumplot_%s_%i.pdf' % (fldname, jd))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #####################################################################
