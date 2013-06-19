@@ -24,7 +24,11 @@ try:
 except:
     USE_FIGPREF = False
 
-import mycolor
+try:
+ import mycolor
+except ImportError, e:
+ pass 
+
 
 miv = np.ma.masked_invalid
 
@@ -271,7 +275,8 @@ class ConnectionMatrix(trm.Trm):
         self.gcm.mp.scatter(x, y, 10, colorvec)
         self.gcm.mp.nice()
         pl.clim(0,10000)
-        mycolor.freecbar([0.2,.06,0.6,0.020],[2000,4000,6000,8000])
+        if 'mycolor' in sys.modules:
+            mycolor.freecbar([0.2,.06,0.6,0.020],[2000,4000,6000,8000])
         pl.suptitle("Trajectories seeded from %s to %s, Duration: %i-%i days" %
                     (pl.num2date(jd1).strftime("%Y-%m-%d"),
                      pl.num2date(jd1+djd).strftime("%Y-%m-%d"), dt,dt+10))
