@@ -32,7 +32,7 @@ except ImportError, e:
 
 miv = np.ma.masked_invalid
 
-class ConnectionMatrix(trm.Trm):
+class ConnectivityMatrix(trm.Trm):
     """ Class to handle connectivity matrices from trajectories
 
     This class generates connectivity matrices from defined regions
@@ -48,7 +48,7 @@ class ConnectionMatrix(trm.Trm):
     """
 
     def __init__(self,projname,casename="", radius=2, **kwargs):
-        super(Matrix,self).__init__(projname, casename, **kwargs)
+        super(ConnectivityMatrix,self).__init__(projname, casename, **kwargs)
         self.radius = radius
         self.filetype = "hdf"
         self.add_default_regmask()
