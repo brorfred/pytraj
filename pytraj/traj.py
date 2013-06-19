@@ -279,10 +279,12 @@ class Traj(object):
         return scH
         
     @trajsloaded
-    def movie(self,di=10, coord='latlon',land="nice"):
+    def movie(self,di=10, coord='latlon',land="nice"):        
         mv = anim.Movie()
-        for jd in self.jdvec:
-            print self.jdvec[-1] - jd
+        jdvec = np.sort(self.jdvec)
+        for jd in jdvec:
+            if len(self.jd[self.jd==jd]) <= 1: continue
+            print jdvec[-1] - jd
             if jd/di == float(jd)/di:
                 self.scatter(jd=jd, coord=coord, land=land)
                 mv.image()

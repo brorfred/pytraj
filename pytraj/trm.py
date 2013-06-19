@@ -61,8 +61,11 @@ class Trm(Traj):
         self.nlrun =  parse(self.trmdir,self.projname,self.casename,"run")
 
         if not hasattr(self, 'datadir'): self.datadir = self.nlrun.outDataDir
-        if not hasattr(self, 'datafile'): self.datafile=self.nlrun.outDataFile
-
+        if not hasattr(self, 'datafile'):
+            self.datafile=self.nlrun.outDataFile
+            if self.datafile == '':
+                self.datafile == casename
+                
         self.base_iso = pl.date2num(dtm(
             self.nlgrid.baseYear,
             self.nlgrid.baseMon,
@@ -100,7 +103,7 @@ class Trm(Traj):
             except:
                 self.firstjd = self.lastjd = self.jdrange = 0
                 
-    def load(self, ftype="run", stype='bin', part=None, filename='',
+    def load(self, filename='', ftype="run", stype='bin', part=None,
              jdstart=0, intstart=0, rawdata=False, nogmt=False,
              partappend=True):
         """Load a tracmass output file. Add data to class instance."""

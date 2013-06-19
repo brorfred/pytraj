@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 from mp_kdtree import mpKDTree
 import matplotlib.cm as cm
 
-from hitta import GBRY
+#from hitta import GBRY
 import projmaps, anim
 import trm
 import batch
