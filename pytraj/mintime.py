@@ -9,17 +9,19 @@ from scipy import cluster
 from njord import ecco
 import figpref
 
-from hitta import WRY,GBRY
-import mycolor
+try:
+ import mycolor
+ from hitta import WRY,GBRY
+except ImportError, e:
+ pass 
 
-sys.path.append('/Users/bror/git/pytraj/')
 import trm
 import connect
 import lldist
 
 miv = np.ma.masked_invalid
 
-class MinTimeMatrix(connect.Matrix):
+class MinTimeMatrix(connect.ConnectivityMatrix):
 
     def __init__(self,projname,casename="", **kwargs):
         super(Global,self).__init__(projname, casename, **kwargs)
@@ -229,8 +231,9 @@ class MinTimeMatrix(connect.Matrix):
         pl.clim(-lim,lim)
         self.gcm.mp.text(70,60,'Difference, sinks-sources')
 
-        mycolor.freecbar([0.2,0.12,0.6,0.025],[-lim,-lim/2,0,lim/2,lim],
-                         cmap=GBRY())
+        if 'mycolor' in sys.modules:
+            mycolor.freecbar([0.2,0.12,0.6,0.025],[-lim,-lim/2,0,lim/2,lim],
+                             cmap=GBRY())
         pl.savefig('data/numreg_%03i.pdf' % maxdays)
 
     def plot_mintmin(self, regdij):
@@ -282,7 +285,8 @@ class MinTimeMatrix(connect.Matrix):
         self.gcm.mp.text(70,60,'Time to region')
         self.gcm.mp.scatter(x,y,5,'b')
 
-        mycolor.freecbar([0.2,0.12,0.6,0.025], djtk, cmap=WRY())
+        if 'mycolor' in sys.modules:
+            mycolor.freecbar([0.2,0.12,0.6,0.025], djtk, cmap=WRY())
         pl.savefig('figs/onereg_%02i_%02i_%06i.png' %
                    (self.regdi, self.regdj, regid))
 

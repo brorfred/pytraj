@@ -5,6 +5,7 @@ pytraj/connect.py
 pytraj/lldist.py
 pytraj/mintime.py
 pytraj/mp_kdtree.py
-pytraj/projects.cfg
+pytraj/namelist.py
+pytraj/pytraj_projects.cfg
 pytraj/traj.py
 pytraj/trm.py

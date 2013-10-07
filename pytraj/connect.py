@@ -14,7 +14,11 @@ from scipy.spatial import cKDTree
 from mp_kdtree import mpKDTree
 import matplotlib.cm as cm
 
+<<<<<<< HEAD
 from hitta import GBRY
+=======
+#from hitta import GBRY
+>>>>>>> 5debdbc2b4da2bc2c54a0dd7139fe23fb834f60a
 import trm
 
 try:
@@ -24,14 +28,21 @@ except:
     USE_FIGPREF = False
 
 try:
+<<<<<<< HEAD
     import mycolor
     USE_MYCOLOR = True
 except:
     USE_MYCOLOR = False
+=======
+ import mycolor
+except ImportError, e:
+ pass 
+
+>>>>>>> 5debdbc2b4da2bc2c54a0dd7139fe23fb834f60a
 
 miv = np.ma.masked_invalid
 
-class Matrix(trm.Trm):
+class ConnectivityMatrix(trm.Trm):
     """ Class to handle connectivity matrices from trajectories
 
     This class generates connectivity matrices from defined regions
@@ -47,7 +58,7 @@ class Matrix(trm.Trm):
     """
 
     def __init__(self,projname,casename="", radius=2, **kwargs):
-        super(Matrix,self).__init__(projname, casename, **kwargs)
+        super(ConnectivityMatrix,self).__init__(projname, casename, **kwargs)
         self.radius = radius
         self.filetype = "hdf"
         self.add_default_regmask()
@@ -275,7 +286,8 @@ class Matrix(trm.Trm):
         self.gcm.mp.scatter(x, y, 10, colorvec)
         self.gcm.mp.nice()
         pl.clim(0,10000)
-        mycolor.freecbar([0.2,.06,0.6,0.020],[2000,4000,6000,8000])
+        if 'mycolor' in sys.modules:
+            mycolor.freecbar([0.2,.06,0.6,0.020],[2000,4000,6000,8000])
         pl.suptitle("Trajectories seeded from %s to %s, Duration: %i-%i days" %
                     (pl.num2date(jd1).strftime("%Y-%m-%d"),
                      pl.num2date(jd1+djd).strftime("%Y-%m-%d"), dt,dt+10))
