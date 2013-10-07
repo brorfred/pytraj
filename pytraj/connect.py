@@ -15,9 +15,7 @@ from mp_kdtree import mpKDTree
 import matplotlib.cm as cm
 
 from hitta import GBRY
-import projmaps, anim
 import trm
-import batch
 
 try:
     import figpref
@@ -25,7 +23,11 @@ try:
 except:
     USE_FIGPREF = False
 
-import mycolor
+try:
+    import mycolor
+    USE_MYCOLOR = True
+except:
+    USE_MYCOLOR = False
 
 miv = np.ma.masked_invalid
 
@@ -49,6 +51,7 @@ class Matrix(trm.Trm):
         self.radius = radius
         self.filetype = "hdf"
         self.add_default_regmask()
+        print self.conmatdir
         if not hasattr(self, 'conmatdir'):
             self.conmatdir = os.path.join(os.getcwd(), 'conmatfiles')
         if not os.path.exists(self.conmatdir): os.makedirs(self.conmatdir)

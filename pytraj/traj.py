@@ -5,7 +5,7 @@ import numpy as np
 import pylab as pl
 import matplotlib as mpl
 
-import anim
+#import anim
 
 try:
     from hitta import GrGr
