@@ -14,11 +14,6 @@ from scipy.spatial import cKDTree
 from mp_kdtree import mpKDTree
 import matplotlib.cm as cm
 
-<<<<<<< HEAD
-from hitta import GBRY
-=======
-#from hitta import GBRY
->>>>>>> 5debdbc2b4da2bc2c54a0dd7139fe23fb834f60a
 import trm
 
 try:
@@ -28,17 +23,10 @@ except:
     USE_FIGPREF = False
 
 try:
-<<<<<<< HEAD
     import mycolor
     USE_MYCOLOR = True
 except:
     USE_MYCOLOR = False
-=======
- import mycolor
-except ImportError, e:
- pass 
-
->>>>>>> 5debdbc2b4da2bc2c54a0dd7139fe23fb834f60a
 
 miv = np.ma.masked_invalid
 
