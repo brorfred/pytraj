@@ -212,7 +212,8 @@ class Traj(object):
 
     @trajsloaded
     def scatter(self,mask=None, ntrac=None, jd=None, k1=None, k2=None,
-                c="g", clf=True, coord="latlon", land="nice", map_region=None):
+                c="g", lc='-w', lw='0.5', clf=True, coord="latlon", 
+                land="nice", map_region=None):
         """Plot particle positions on a map
                  
                  mask: Boolean vector inidcating which particles to plot
@@ -264,7 +265,7 @@ class Traj(object):
             pl.xlim(0, self.imt)
             pl.ylim(0, self.jmt)
         if (ntrac is not None) & (coord is "latlon"):
-            self.mp.plot(x,y,'-w',lw=0.5)
+            self.mp.plot(x,y,lc,lw=lw)
 
         """ 
         xl,yl = self.mp(
