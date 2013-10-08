@@ -14,9 +14,7 @@ from scipy.spatial import cKDTree
 from mp_kdtree import mpKDTree
 import matplotlib.cm as cm
 
-#from hitta import GBRY
 import trm
-import batch
 
 try:
     import figpref
@@ -25,10 +23,10 @@ except:
     USE_FIGPREF = False
 
 try:
- import mycolor
-except ImportError, e:
- pass 
-
+    import mycolor
+    USE_MYCOLOR = True
+except:
+    USE_MYCOLOR = False
 
 miv = np.ma.masked_invalid
 
@@ -52,6 +50,7 @@ class ConnectivityMatrix(trm.Trm):
         self.radius = radius
         self.filetype = "hdf"
         self.add_default_regmask()
+        print self.conmatdir
         if not hasattr(self, 'conmatdir'):
             self.conmatdir = os.path.join(os.getcwd(), 'conmatfiles')
         if not os.path.exists(self.conmatdir): os.makedirs(self.conmatdir)
