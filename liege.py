@@ -15,7 +15,7 @@ miv = np.ma.masked_invalid
 def an(arr) : return arr[~np.isnan(arr)]
 
 sys.path.append('/Users/bror/git/SoPaGyr/')
-import bender_liege
+#import bender_liege
 
 class Figs(partsat.DeltaField):
 
@@ -283,7 +283,7 @@ class Figs(partsat.DeltaField):
 
         pl.savefig('figs/liege/meantime_%s.pdf' % fldname)
 
-    def meantime2plot(self):
+    def meantime2plot(self, sst=True, chl=True):
 
         figpref.current()
         pl.close(1)
@@ -299,13 +299,18 @@ class Figs(partsat.DeltaField):
             pl.plot(self.jdvec, self.negmean+self.posmean,lw=1,c='k')
             pl.gca().xaxis.axis_date()
 
-        ax = pl.subplot(2,1,1)
-        plot('Dsst')
-        pl.ylabel('Dsst ($\degree$C d$^{-1}$')
-        pl.setp(ax.get_xticklabels(), visible=False)        
-        ax = pl.subplot(2,1,2)
-        plot('Dchl')
-        pl.ylabel('Chl (mg m$^{3}$ d$^{-1}$')
+
+        if sst:
+            ax = pl.subplot(2,1,1)
+            plot('Dsst')
+            pl.ylabel('Dsst ($\degree$C d$^{-1}$')
+            pl.setp(ax.get_xticklabels(), visible=False)        
+        if chl:
+            ax = pl.subplot(2,1,2)
+            plot('Dchl')
+            pl.ylim(-2,2)
+            pl.yticks([-2,-1,0,1,2])
+            pl.ylabel('Chl (mg m$^{3}$ d$^{-1}$)')
         pl.savefig('figs/liege/meantime_both.pdf')
 
 
