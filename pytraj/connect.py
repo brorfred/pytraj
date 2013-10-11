@@ -1,4 +1,4 @@
-import sys,os
+import sys,os, errno
 import datetime
 import glob
 from datetime import datetime as dtm
@@ -50,9 +50,14 @@ class ConnectivityMatrix(trm.Trm):
         self.radius = radius
         self.filetype = "hdf"
         self.add_default_regmask()
-        print self.conmatdir
         if not hasattr(self, 'conmatdir'):
             self.conmatdir = os.path.join(os.getcwd(), 'conmatfiles')
+        try:
+            os.makedirs(self.conmatdir)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST and os.path.isdir(self.conmatdir):
+                pass
+            else: raise
         if not os.path.exists(self.conmatdir): os.makedirs(self.conmatdir)
         
     def generate_regmat(self, di=20, dj=20, mask=[]):
