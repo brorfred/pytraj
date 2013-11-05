@@ -15,6 +15,13 @@ from traj import Traj
 import namelist as nlt
 import lldist
 
+def isint(str):
+    try:
+        int(str)
+        return True
+    except ValueError:
+        return False
+
 """trm - a module to post-process output from TRACMASS""
 
 This module simplifies reading and analysis of data genereated by the TRACMASS
@@ -40,10 +47,11 @@ class Trm(Traj):
 
     def __init__(self,projname, casename=None, **kwargs):
 
-        self.__dict__['part'] = None
-        self.__dict__['rank'] = None
-        self.__dict__['arg1'] = None
-        self.__dict__['arg2'] = None
+        self.__dict__['ints0'] = None
+        self.__dict__['part']  = None
+        self.__dict__['rank']  = None
+        self.__dict__['arg1']  = None
+        self.__dict__['arg2']  = None
         super(Trm, self).__init__(projname, casename, **kwargs)
         if not hasattr(self, 'trmdir'):
             self.trmdir = os.getenv('TRMDIR')
@@ -51,7 +59,7 @@ class Trm(Traj):
                 raise EnvironmentError, """ Trmdir is not set.
                 Add TRMDIR=/path/to/tracmass to your local environment
                 or specify trmdir when calling Trm."""
-
+        
         def parse(od,pn,cn,sfx):
             gridfile = '/%s/projects/%s/%s_%s.in' % (od, pn, cn, sfx)
             if not os.path.isfile(gridfile):
@@ -75,22 +83,25 @@ class Trm(Traj):
 
         if not os.path.isabs(self.datadir):
             self.datadir = os.path.join(self.trmdir, self.datadir)
+        self.gen_filelists()
 
+            
     @property
     def dtype(self):
         return np.dtype([('ntrac','i4'), ('ints','f8'), 
                          ('x','f4'), ('y','f4'), ('z','f4')])
 
-    def read_bin(self, filename, count=-1):
-        """Read binary output from TRACMASS"""
-        return np.fromfile(open(filename), self.dtype, count=count)
-
-    def read_asc(self, filename):
-        """Read ascii output from TRACMASS"""
-        return np.genfromtxt(filename, self.dtype)
+    def readfile(self, filename, count=-1):
+        """Read  output from TRACMASS"""
+        if filename[-3:] == "bin":
+            return np.fromfile(open(filename), self.dtype, count=count)
+        elif filename[-3:] == "asc":
+            return np.genfromtxt(filename, self.dtype)
+        else:
+            raise IOError, "Unknown file format, file should be bin or asc"
 
     def read_jdrange(self, filename):
-        """Read last reacord in binary file"""
+        """Read last record in binary file"""
         with open(os.path.join(self.datadir, filename)) as fH:
             try:
                 row = np.fromfile(fH, self.dtype, 1)
@@ -103,10 +114,22 @@ class Trm(Traj):
             except:
                 self.firstjd = self.lastjd = self.jdrange = 0
                 
-    def load(self, filename='', ftype="run", stype='bin', part=None,
+    def load(self, filename=None, ftype=None, stype=None, part=None, rank=None,
              jdstart=0, intstart=0, rawdata=False, nogmt=False,
-             partappend=True):
+             partappend=True, rankappend=True, verbose=False, dryrun=False):
         """Load a tracmass output file. Add data to class instance."""
+        def vprint(str):
+            if verbose == True:
+                print(str)
+        filename = self.currfile if filename is None else filename
+        ftype = filename[-7:-4] if ftype is None else ftype
+        stype = filename[-3:]   if stype is None else stype
+        if partappend is False and part is None:
+            part = self.parse_filename(filename)['part']
+        if rankappend is False and rank is None:
+            rank = self.parse_filename(filename)['rank']
+        self.gen_filelists(part=part, rank=rank)#, arg1=None, arg2=None):
+        
         if jdstart != 0:
             ints = (jdstart+self.base_iso) * 24./self.nlgrid.ngcm  + 1
             filename = ("%s%08i_%s.%s" % (self.datafile,ints,ftype,stype))
@@ -114,25 +137,21 @@ class Trm(Traj):
         elif intstart != 0:
             filename = ("%s%08i_%s.%s" % (self.datafile,intstart,
                                           ftype,stype))
-        elif filename == '':
-            filename = "%s_%s.%s" % (self.currfile[:-8],ftype,stype) 
 
-        def readfile(filename):
-            if filename[-3:] == "bin":
-                return self.read_bin(self.datadir + filename)
-            elif filename[-3:] == "asc":
-                return self.read_asc(self.datadir + filename)
-            else:
-                raise IOError, "Unknown file format, file should be bin or asc"
-                    
-        partlist = self.list_partfiles(filename)
-        if (len(partlist) > 1) & (partappend is True):
+        filelist = getattr(self, ftype + "files")  
+        if (len(filelist) > 1):
             runtraj = np.array([], dtype=self.dtype)
-            for fname in partlist:
-                runtraj = np.concatenate((runtraj, readfile(fname)))
+            vprint ("Number of files: %i" % len(filelist) )
+            for fname in filelist:
+                vprint (fname)
+                if dryrun is False: 
+                    runtraj = np.concatenate((runtraj, self.readfile(fname)))
         else:
-            runtraj = readfile(filename)
+            vprint (filelist[0])
+            if dryrun is False: runtraj = self.readfile(filelist[0])
+        if dryrun is True: return 
 
+                
         if rawdata is True: self.runtraj = runtraj
         self.filename = filename
         tvec = ['ntrac', 'ints', 'x', 'y', 'z']
@@ -274,28 +293,50 @@ class Trm(Traj):
             elif 'p' in n : fdict['part'] = int(n[1:])
             elif 'a' in n : fdict['arg1'] = int(n[1:])
             elif 'b' in n : fdict['arg2'] = int(n[1:])
-            elif 't' in n : fdict['ints'] = int(n[1:])
+            elif 't' in n : fdict['ints0'] = int(n[1:])
             else :
                 try:
-                    fdict['ints'] = int(n[1:])
+                    fdict['ints0'] = int(n[1:])
                 except:
                     fdict['stuff'] = n
         return fdict
 
-    def list_partfiles(self, filename=None):
+    def list_partfiles(self, filename=None, rank=None):
         """ Create list of all parts of a file"""
-        if filename is None: 
-            filename = self.currfile
-        globname = '_'.join(['p*' if p[0] is 'p' else
-                             p for p in filename.split('_') ])
-        return [os.path.basename(g)
-                for g in glob.glob(os.path.join(self.datadir,globname))]
+        if filename is not None:
+            rank = self.parse_filename(filename)['rank']
+        elif rank is None:
+            rank = self.parse_filename(self.currfile)['rank']
+        self.gen_filelists(rank=rank)
+        return [os.path.basename(f) for f in self.runfiles]
 
+    def list_rankfiles(self, filename=None, part=None):
+        """ Create list of all parts of a file"""
+        if filename is not None:
+            part = self.parse_filename(filename)['part']
+        elif part is None:
+            part = self.parse_filename(self.currfile)['part']
+        self.gen_filelists(part=part)
+        return [os.path.basename(f) for f in getattr(self, ftype +'files')]
 
-    def gen_filelists(self, part=None, rank=None, arg1=None, arg2=None):
-        """ Create list of all output files connected to current case"""
-        arglist   = ['part','rank','arg1','arg2']
-        ftypelist = ['run','err','in','out','kll']
+    def gen_filelists(self, **kwargs):
+        """ Create lists of output files
+
+         Create lists of output files connected to current case filtered by 
+         different selections. 
+
+         parameters:
+         -----------
+         ints0 : starttime of file
+         part  : part number
+         rank  : rank number 
+         arg1  : value of arg1 if added to filename
+         arg2  : value of arg2 if added to filename
+         """
+        arglist   = ['ints0', 'part', 'rank', 'arg1', 'arg2']
+        ftypelist = ['run',   'err',  'ini',  'out',  'kll']
+        for a in arglist:
+            if a in kwargs.keys(): self.__dict__[a] = kwargs[a]
         for tp in ftypelist:
             flist = glob.glob("%s/%s*_%s.*"%
                               (self.datadir, self.nlrun.outDataFile, tp))
@@ -311,7 +352,7 @@ class Trm(Traj):
         if len(self.runfiles) > 0:
             for a in arglist: setattr(self, 'file%ss'%a, np.array(tmpdict[a]))
             mask = self.fileparts == self.fileparts
-            for a,i in zip(arglist, [part, rank, arg1, arg2]):
+            for a,i in zip(arglist, [getattr(self,a) for a in arglist]):
                 if i is not None:
                     mask = mask & (self.__dict__['file%ss'%a] == i)
             for a in arglist:
@@ -323,11 +364,22 @@ class Trm(Traj):
 
     @property
     def part(self):
+        return  self.__dict__['ints0']
+    @part.setter
+    def part(self, val):
+        self.gen_filelists(ints0=val)
+        self.__dict__['part'] = val
+    @property
+    def partvec(self):
+        if not hasattr(self, 'fileparts'): self.gen_filelists()
+        return np.unique(self.fileparts)
+                    
+    @property
+    def part(self):
         return  self.__dict__['part']
     @part.setter
     def part(self, val):
-        self.gen_filelists(part=val, rank=self.rank, arg1=self.arg1,
-                           arg2=self.arg2)
+        self.gen_filelists(part=val)
         self.__dict__['part'] = val
     @property
     def partvec(self):
@@ -339,8 +391,7 @@ class Trm(Traj):
         return  self.__dict__['rank']
     @rank.setter
     def rank(self, val):
-        self.gen_filelists(part=self.part, rank=val, arg1=self.arg1,
-                           arg2=self.arg2)
+        self.gen_filelists(rank=val)
         self.__dict__['rank'] = val
     @property
     def rankvec(self):
@@ -352,8 +403,7 @@ class Trm(Traj):
         return  self.__dict__['arg1']
     @arg1.setter
     def arg1(self, val):
-        self.gen_filelists(part=self.part, rank=self.rank, arg1=val,
-                           arg2=self.arg2)
+        self.gen_filelists(arg1=val)
         self.__dict__['arg1'] = val
     @property
     def arg1vec(self):
@@ -365,8 +415,7 @@ class Trm(Traj):
         return  self.__dict__['arg2']
     @arg2.setter
     def arg2(self, val):
-        self.gen_filelists(part=self.part, rank=self.rank, arg1=self.arg1,
-                           arg2=val)
+        self.gen_filelists(arg2=val)
         self.__dict__['arg2'] = val
     @property
     def arg2vec(self):
