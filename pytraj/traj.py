@@ -5,8 +5,14 @@ import numpy as np
 import pylab as pl
 import matplotlib as mpl
 
-#import anim
+try:
+    import anim
+    USE_ANIM = True
+except:
+    USE_ANIM = False
 
+
+    
 try:
     from hitta import GrGr
     GR_CMAP = GrGr()

@@ -118,6 +118,8 @@ class Trm(Traj):
              jdstart=0, intstart=0, rawdata=False, nogmt=False,
              partappend=True, rankappend=True, verbose=False, dryrun=False):
         """Load a tracmass output file. Add data to class instance."""
+        arglist = ['ints0', 'part', 'rank', 'arg1', 'arg2']
+        argvals = [getattr(self,a) for a in arglist]
         def vprint(str):
             if verbose == True:
                 print(str)
@@ -130,14 +132,6 @@ class Trm(Traj):
             rank = self.parse_filename(filename)['rank']
         self.gen_filelists(part=part, rank=rank)#, arg1=None, arg2=None):
         
-        if jdstart != 0:
-            ints = (jdstart+self.base_iso) * 24./self.nlgrid.ngcm  + 1
-            filename = ("%s%08i_%s.%s" % (self.datafile,ints,ftype,stype))
-            self.jd = jdstart
-        elif intstart != 0:
-            filename = ("%s%08i_%s.%s" % (self.datafile,intstart,
-                                          ftype,stype))
-
         filelist = getattr(self, ftype + "files")  
         if (len(filelist) > 1):
             runtraj = np.array([], dtype=self.dtype)
@@ -150,8 +144,9 @@ class Trm(Traj):
             vprint (filelist[0])
             if dryrun is False: runtraj = self.readfile(filelist[0])
         if dryrun is True: return 
+        for a,v in zip(arglist,argvals): setattr(self,a,v)
+        self.gen_filelists()
 
-                
         if rawdata is True: self.runtraj = runtraj
         self.filename = filename
         tvec = ['ntrac', 'ints', 'x', 'y', 'z']
@@ -285,7 +280,7 @@ class Trm(Traj):
         filename = os.path.basename(filename)
         fdict = {}
         arglist   = ['part','rank','arg1','arg2']
-        for a in arglist: fdict[a] = -999
+        for a in arglist: fdict[a] = None
         plist = filename[len(self.nlrun.outDataFile)+1:].split('_')
         fdict['ftype'],fdict['stype'] = plist[-1].split('.')
         for n in plist[:-1]:
@@ -347,7 +342,7 @@ class Trm(Traj):
         for f in self.runfiles:
             fd = self.parse_filename(f)
             for a in arglist:
-                tmpdict[a].append(fd[a] if a in fd.keys() else -999)
+                tmpdict[a].append(fd[a] if a in fd.keys() else None)
             self.filedict[f] = fd
         if len(self.runfiles) > 0:
             for a in arglist: setattr(self, 'file%ss'%a, np.array(tmpdict[a]))
