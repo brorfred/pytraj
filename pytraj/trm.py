@@ -94,12 +94,14 @@ class Trm(Traj):
     def readfile(self, filename, count=-1):
         """Read  output from TRACMASS"""
         if filename[-3:] == "bin":
-            return np.fromfile(open(filename), self.dtype, count=count)
+            runtraj = np.fromfile(open(filename), self.dtype, count=count)
         elif filename[-3:] == "asc":
             return np.genfromtxt(filename, self.dtype)
         else:
             raise IOError, "Unknown file format, file should be bin or asc"
-
+       
+        return runtraj
+        
     def read_jdrange(self, filename):
         """Read last record in binary file"""
         with open(os.path.join(self.datadir, filename)) as fH:
@@ -115,7 +117,7 @@ class Trm(Traj):
                 self.firstjd = self.lastjd = self.jdrange = 0
                 
     def load(self, filename=None, ftype=None, stype=None, part=None, rank=None,
-             jdstart=0, intstart=0, rawdata=False, nogmt=False,
+             jdstart=0, intstart=0, rawdata=False, nogmt=False,absntrac=True,
              partappend=True, rankappend=True, verbose=False, dryrun=False):
         """Load a tracmass output file. Add data to class instance."""
         arglist = ['ints0', 'part', 'rank', 'arg1', 'arg2']
@@ -130,20 +132,19 @@ class Trm(Traj):
             part = self.parse_filename(filename)['part']
         if rankappend is False and rank is None:
             rank = self.parse_filename(filename)['rank']
-        self.gen_filelists(part=part, rank=rank)#, arg1=None, arg2=None):
+        self.gen_filelists(rank=rank, part=part)
         
         filelist = getattr(self, ftype + "files")  
-        if (len(filelist) > 1):
-            runtraj = np.array([], dtype=self.dtype)
-            vprint ("Number of files: %i" % len(filelist) )
-            for fname in filelist:
-                vprint (fname)
-                if dryrun is False: 
-                    runtraj = np.concatenate((runtraj, self.readfile(fname)))
-        else:
-            vprint (filelist[0])
-            if dryrun is False: runtraj = self.readfile(filelist[0])
-        if dryrun is True: return 
+        runtraj = np.array([], dtype=self.dtype)
+        vprint ("Number of files: %i" % len(filelist) )
+        for fname in filelist:
+            vprint (fname)
+            if dryrun is False: 
+                rtr = self.readfile(fname)
+                if absntrac == True:
+                    rtr['ntrac'] = rtr['ntrac'] + self.rankntrac0[
+                        self.parse_filename(fname)['rank']]
+                runtraj = np.concatenate((runtraj, rtr))                    
         for a,v in zip(arglist,argvals): setattr(self,a,v)
         self.gen_filelists()
 
@@ -357,6 +358,30 @@ class Trm(Traj):
                 if len(flist) == len(mask):
                     self.__dict__[tp + "files"] = list(np.array(flist)[mask])
 
+    @property
+    def rankmaxntrac(self):
+        if not 'rankmaxntrac' in self.__dict__:
+            self.__dict__['rankmaxntrac']  = {}
+            cum = self.__dict__['rankmaxntrac']  = {}
+
+            for r in self.rankvec:
+                self.load(part=1, rank=r, ftype="ini", absntrac=False)
+                self.__dict__['rankmaxntrac'] [r] = self.ntrac.max()
+        
+        return self.__dict__['rankmaxntrac']            
+
+    @property
+    def rankntrac0(self):
+        if not 'rankntrac0' in self.__dict__:
+            self.rank=None
+            self.part=None
+            cum = self.__dict__['rankntrac0']  = np.zeros((self.rankvec.max()+1))
+            for r in np.sort(self.rankvec)[:-1]:
+                self.load(part=1, rank=r, ftype="ini", absntrac=False)
+                cum[r+1] = cum[r] + self.ntrac.max() +1
+        return self.__dict__['rankntrac0']          
+
+                    
     @property
     def part(self):
         return  self.__dict__['ints0']
