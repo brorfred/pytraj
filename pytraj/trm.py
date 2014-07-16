@@ -117,7 +117,7 @@ class Trm(Traj):
                 self.firstjd = self.lastjd = self.jdrange = 0
                 
     def load(self, filename=None, ftype=None, stype=None, part=None, rank=None,
-             jdstart=0, intstart=0, rawdata=False, nogmt=False,absntrac=True,
+             jdstart=0, intstart=0, rawdata=False, absntrac=True,
              partappend=True, rankappend=True, verbose=False, dryrun=False):
         """Load a tracmass output file. Add data to class instance."""
         arglist = ['ints0', 'part', 'rank', 'arg1', 'arg2']
@@ -157,7 +157,7 @@ class Trm(Traj):
         self.x = self.x - 1
         self.y = self.y - 1
         self.x[self.x<0] = self.x[self.x<0] + self.imt
-        if hasattr(self.gcm,'gmt') & (nogmt is False):
+        if hasattr(self.gcm,'gmt') & (self.nogmt is False):
             pos = self.imt - self.gcm.gmt.gmtpos
             x1 = self.x <= pos
             x2 = self.x >  pos
@@ -168,12 +168,14 @@ class Trm(Traj):
         #for tv in tvec:
         #    self.__dict__[tv] = self.__dict__[tv][mask]
         self.intstart = intstart
-        if self.nlrun.twritetype == 1:
+        if not hasattr(self.nlrun, 'twritetype'):
+            self.jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
+        elif self.nlrun.twritetype == 1:
             self.jd = (self.ints.astype(float)/60/60/24 + self.base_iso)
         elif self.nlrun.twritetype == 2:
             self.jd = (self.ints + self.base_iso)
         else:
-            self.jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
+            raise KeyError, "Unknown twritetype, chek the run namelist"
         self.jdvec = np.unique(self.jd)
         if hasattr(self,'lon'): self.ijll()
 
@@ -273,7 +275,10 @@ class Trm(Traj):
                           (self.datadir,self.nlrun.outDataFile,
                            ftype,stype))
         datearr = np.array([ os.path.getmtime(f) for f in flist])
-        listpos = np.nonzero(datearr == datearr.max())[0][0]
+        try:
+            listpos = np.nonzero(datearr == datearr.max())[0][0]
+        except:
+            raise IOError,"No data files exists at %s" % self.datadir
         return os.path.basename(flist[listpos])
 
     def parse_filename(self,filename):        
@@ -281,7 +286,7 @@ class Trm(Traj):
         filename = os.path.basename(filename)
         fdict = {}
         arglist   = ['part','rank','arg1','arg2']
-        for a in arglist: fdict[a] = None
+        for a in arglist: fdict[a] = 0
         plist = filename[len(self.nlrun.outDataFile)+1:].split('_')
         fdict['ftype'],fdict['stype'] = plist[-1].split('.')
         for n in plist[:-1]:
@@ -373,12 +378,16 @@ class Trm(Traj):
     @property
     def rankntrac0(self):
         if not 'rankntrac0' in self.__dict__:
-            self.rank=None
-            self.part=None
-            cum = self.__dict__['rankntrac0']  = np.zeros((self.rankvec.max()+1))
-            for r in np.sort(self.rankvec)[:-1]:
-                self.load(part=1, rank=r, ftype="ini", absntrac=False)
-                cum[r+1] = cum[r] + self.ntrac.max() +1
+            if self.rankvec[0] == None:
+                self.__dict__['rankntrac0'] = 0
+            else:
+                self.rank=None
+                self.part=None
+                cum = self.__dict__['rankntrac0']  = np.zeros(
+                    (self.rankvec.max()+1))
+                for r in np.sort(self.rankvec)[:-1]:
+                    self.load(part=1, rank=r, ftype="ini", absntrac=False)
+                    cum[r+1] = cum[r] + self.ntrac.max() +1
         return self.__dict__['rankntrac0']          
 
                     
