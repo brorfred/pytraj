@@ -252,9 +252,9 @@ class Traj(object):
     
         if coord is "latlon":
             x,y = self.mp(self.lon[mask],self.lat[mask])
-            scH = self.mp.scatter(x, y, 5, c)
+            scH = self.mp.scatter(x, y, 5, c, lw=0)
         else:
-            scH = pl.scatter(self.x[mask], self.y[mask], 5, c)
+            scH = pl.scatter(self.x[mask], self.y[mask], 5, c,lw=0)
     
         if land is "nice":
             land = self.gcm.mp.nice()
