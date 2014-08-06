@@ -7,6 +7,7 @@ from itertools import izip
 import numpy as np
 import pylab as pl
 import scipy.io
+from scipy.io import netcdf_file
 from matplotlib.colors import LogNorm
 import tables as td
 
@@ -20,10 +21,9 @@ miv = np.ma.masked_invalid
 
 class Partsat(pytraj.Trm, postgresql.DB):
 
-    def __init__(self,projname,casename="", **kwargs):
+    def __init__(self, projname, casename="", **kwargs):
         super(Partsat,self).__init__(projname, casename, *kwargs)
         postgresql.DB.__init__(self, projname, casename, database='partsat')
-
         self.flddict = {'par':('L3',),'chl':('box8',)}
         if projname == 'oscar':
             import pysea.MODIS
@@ -37,16 +37,16 @@ class Partsat(pytraj.Trm, postgresql.DB):
                 return (self.base_iso +(ints-(intstart)*10800)/150 +
                         intstart/8)
         elif projname=="gompom":
-            n = pycdf.CDF('/Users/bror/svn/modtraj/box8_gompom.cdf')
-            self.gomi = n.var('igompom')[:]
-            self.gomj = n.var('jgompom')[:]
-            self.sati = n.var('ibox8')[:]
-            self.satj = n.var('jbox8')[:]
+            n = netcdf_file('/Users/bror/svn/modtraj/box8_gompom.cdf')
+            self.gomi = n.variables['igompom'][:]
+            self.gomj = n.variables['jgompom'][:]
+            self.sati = n.variables['ibox8'][:]
+            self.satj = n.variables['jbox8'][:]
         elif projname=="jplSCB":
-            import mati
+            from njord import mati
             self.sat = mati.Cal()
         elif projname=="jplNow":
-            import mati
+            from njord import mati
             self.sat = mati.Cal()
 
     def map2grid(self, vec):
