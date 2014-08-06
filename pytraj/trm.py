@@ -46,12 +46,11 @@ class Trm(Traj):
     """
 
     def __init__(self,projname, casename=None, **kwargs):
-
         self.__dict__['ints0'] = None
         self.__dict__['part']  = None
         self.__dict__['rank']  = None
         self.__dict__['arg1']  = None
-        self.__dict__['arg2']  = None
+        self.__dict__['arg2']  = None        
         super(Trm, self).__init__(projname, casename, **kwargs)
         if not hasattr(self, 'trmdir'):
             self.trmdir = os.getenv('TRMDIR')
@@ -59,7 +58,6 @@ class Trm(Traj):
                 raise EnvironmentError, """ Trmdir is not set.
                 Add TRMDIR=/path/to/tracmass to your local environment
                 or specify trmdir when calling Trm."""
-        
         def parse(od,pn,cn,sfx):
             gridfile = '/%s/projects/%s/%s_%s.in' % (od, pn, cn, sfx)
             if not os.path.isfile(gridfile):
@@ -85,7 +83,6 @@ class Trm(Traj):
             self.datadir = os.path.join(self.trmdir, self.datadir)
         self.gen_filelists()
 
-            
     @property
     def dtype(self):
         return np.dtype([('ntrac','i4'), ('ints','f8'), 
@@ -147,9 +144,12 @@ class Trm(Traj):
                 runtraj = np.concatenate((runtraj, rtr))                    
         for a,v in zip(arglist,argvals): setattr(self,a,v)
         self.gen_filelists()
-
-        if rawdata is True: self.runtraj = runtraj
         self.filename = filename
+        self.intstart = intstart
+        if rawdata is True: self.runtraj = runtraj
+        self.process_runtraj(runtraj)
+            
+    def process_runtraj(self, runtraj):
         tvec = ['ntrac', 'ints', 'x', 'y', 'z']
         for tv in tvec:
             self.__dict__[tv] = runtraj[:][tv]
@@ -163,11 +163,7 @@ class Trm(Traj):
             x2 = self.x >  pos
             self.x[x1] = self.x[x1] + self.gcm.gmt.gmtpos
             self.x[x2] = self.x[x2] - pos
-
-        #mask = (self.x>self.imt+1) | (self.y>self.jmt+1)
-        #for tv in tvec:
-        #    self.__dict__[tv] = self.__dict__[tv][mask]
-        self.intstart = intstart
+        self.x[self.x==self.imt] = self.x.min()
         if not hasattr(self.nlrun, 'twritetype'):
             self.jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
         elif self.nlrun.twritetype == 1:
