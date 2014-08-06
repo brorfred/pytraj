@@ -41,7 +41,7 @@ class Traj(object):
         self.casename = projname if casename is None else casename
         self._load_presets('pytraj_projects',kwargs)
         for key,val in self.inkwargs.iteritems(): self.__dict__[key] = val
-        if self.use_njord: self.setup_njord()
+        self.setup_njord()
         if hasattr(self, 'llon'):
             self.llon[self.llon<-180] = self.llon[self.llon<-180] + 360
             self.llon[self.llon> 180] = self.llon[self.llon> 180] - 360
@@ -77,9 +77,10 @@ class Traj(object):
                 splitkey(key, val)
                 
     def setup_njord(self):
+        if not self.use_njord:
+            return
         self.gcm = (__import__("njord." + self.njord_module,
                              fromlist=["njord"]).__dict__[self.njord_class])()
-        self.gcm.add_landmask()
         self.landmask = self.gcm.landmask
         self.llon = self.gcm.llon
         self.llat = self.gcm.llat
