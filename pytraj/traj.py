@@ -53,7 +53,7 @@ class Traj(object):
                  "%s/.%s.cfg" % (os.path.expanduser("~"), filepref),
                  "%s/%s.cfg" % (self.basedir, filepref)]
         for fnm in files:
-            cfg.read(fnm)
+            a = cfg.read(fnm)
             if self.projname in cfg.sections():
                 self.config_file = fnm
                 break
@@ -330,8 +330,15 @@ class Traj(object):
                                'x':     self.x,
                                'y':     self.y})
 
-            
-        
+    def heatmat(self):
+        """Create a GCM grid with number of particels from x,y vectors"""
+        ind = np.ravel_multi_index(np.vstack((self.y.astype(int),
+                                              self.x.astype(int))),
+                                   (self.jmt, self.imt))
+        mat = self.llon * 0
+        mat.flat[:] = np.bincount(ind, minlength=self.imt * self.jmt)
+        return mat
+    
 
     def zip(self,xarr,yarr):
         """
