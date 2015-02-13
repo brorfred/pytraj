@@ -11,8 +11,8 @@ from scipy.io import netcdf_file
 from matplotlib.colors import LogNorm
 import tables as td
 
-from hitta import GBRY, WRY
-import projmaps, anim
+from hitta import GBRY, WRY, GBW, GBW_R
+import projmap, anim
 import pytraj
 import postgresql
 import batch
@@ -317,21 +317,26 @@ class DeltaField(Partsat):
             self.ncpvec[(self.ncpvec<-5000) | (self.ncpvec>5000)] = np.nan
             self.ncp = self.map2grid(self.ncpvec)
 
-    def pcolor(self, field, jd=None,oneside=False):
+    def pcolor(self, field, jd=None, vmin=-10,vmax=10, oneside=False, clf=True, cb=True):
         """Plot a map of a field using projmap"""
         self.add_mp()
-        pl.clf()
-        pl.subplot(111,axisbg='0.9')
-        if oneside:
+        if clf:
+            pl.clf()
+            pl.subplot(111,axisbg='0.9')
+        if (oneside==True) | (oneside=="pos"):
             cmap = WRY()
+        elif oneside=="neg":
+            cmap = GBW()
+        elif oneside=="negr":
+            cmap = GBW_R()
         else:
             cmap = GBRY()
         self.mp.pcolormesh(self.mpxll,self.mpyll,miv(field), rasterized=True,
-                           cmap=cmap)
-        self.mp.nice()
+                           cmap=cmap, vmin=vmin,vmax=vmax)
+        self.mp.nice(latlabels=False, lonlabels=False)
         if jd: pl.title(pl.num2date(jd).strftime("%Y-%m-%d"))
-        pl.clim(-10,10)
-        pl.colorbar(aspect=40,shrink=0.95,pad=0,fraction=0.05)
+        if cb:
+            pl.colorbar(aspect=40,shrink=0.95,pad=0,fraction=0.05)
 
     def movie(self, jd1, jd2, field='chl'):
         """Create a movie of the daily changes in tracer"""
@@ -450,9 +455,6 @@ class DeltaField(Partsat):
         pl.legend(('Random values, symetrical', 'Random values, gaussian',
                    'Trajs, increasing values','Trajs, decreasing values'))
         pl.savefig('figs/cumcumplot_%s_%i.pdf' % (fldname, jd))
-
-
-
 
 
 
