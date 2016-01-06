@@ -7,7 +7,7 @@ from scipy import cluster
 
 
 from njord import ecco
-import figpref
+from njord.utils import figpref
 
 try:
  import mycolor
