@@ -74,9 +74,9 @@ class ConnectivityMatrix(trm.Trm):
         self.regmat[~mask] = 0
         self.nreg = ncnt - 1
 
-    def generate_regdiscs(self, mask=[]):
+    def generate_regdiscs(self, mask=None):
         """Create discs defining the regions used for connectivities"""
-        if len(mask)==0: mask = self.mask
+        mask = self.mask if mask is None else mask
         ncnt = 1
         nvec = []
         ivec = []
@@ -108,17 +108,13 @@ class ConnectivityMatrix(trm.Trm):
         self.nreg = self.discn.max()+1
 
     @trm.Traj.trajsloaded
-    def regvec_from_discs(self,mask=False, vecmask=False):
+    def regvec_from_discs(self, mask=None, vecmask=None):
         """Generate a vector with region IDs"""
-        if not mask:
-            self.add_default_regmask()
-            mask = self.mask
-        if not hasattr(self, 'nreg'): self.generate_regdiscs(mask)
-        if vecmask is False:
-            xvec = self.x; yvec = self.y
-        else:
-            xvec = self.x[vecmask]; yvec = self.y[vecmask]
-        #dist,ij = self.discKD.query(self.zip(xvec, yvec), 1)
+        mask = self.mask if mask is None else mask
+        if not hasattr(self, 'nreg') | mask is not None:
+            self.generate_regdiscs(mask)
+        xvec = self.x if vecmask is None else self.x[vecmask]
+        yvec = self.y if vecmask is None else self.y[vecmask]
         dist,ij = self.discKD.parallel_query(self.zip(xvec, yvec), 1)
         self.reg = self.discn[ij]
         self.reg[dist>self.radius] = 0
@@ -292,7 +288,7 @@ class ConnectivityMatrix(trm.Trm):
                 self.multiplot(730120+jd,dt=dt)
 
     def add_default_regmask(self):
-        self.mask = (self.gcm.depth<200) & (self.gcm.depth>10)
+        self.mask = (self.gcm.depth<300) & (self.gcm.depth>10)
         self.mask[:,:250] = False
         self.mask[:160,:] = False
 
