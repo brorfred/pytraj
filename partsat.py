@@ -317,7 +317,8 @@ class DeltaField(Partsat):
             self.ncpvec[(self.ncpvec<-5000) | (self.ncpvec>5000)] = np.nan
             self.ncp = self.map2grid(self.ncpvec)
 
-    def pcolor(self, field, jd=None, vmin=-10,vmax=10, oneside=False, clf=True, cb=True):
+    def pcolor(self, field, jd=None, vmin=-10,vmax=10, oneside=False,
+               clf=True, cb=True, ):
         """Plot a map of a field using projmap"""
         self.add_mp()
         if clf:
@@ -335,7 +336,9 @@ class DeltaField(Partsat):
                            cmap=cmap, vmin=vmin,vmax=vmax)
         self.mp.nice(latlabels=False, lonlabels=False)
         if jd: pl.title(pl.num2date(jd).strftime("%Y-%m-%d"))
-        if cb:
+        if type(cb) is dict:
+            pl.colorbar(aspect=40,shrink=0.95,pad=0,fraction=0.05, **cb)
+        elif cb:
             pl.colorbar(aspect=40,shrink=0.95,pad=0,fraction=0.05)
 
     def movie(self, jd1, jd2, field='chl'):
