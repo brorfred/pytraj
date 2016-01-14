@@ -26,6 +26,7 @@ class Figs(partsat.DeltaField):
     def h5load(self):
         self.h5open('Dsst')
         self.Dsst = self.h5field[:]
+        self.jdvec = self.h5f.root.jdvec[:]
         self.h5open('Dchl')
         self.Dchl = self.h5field[:]
         self.h5close()
@@ -73,8 +74,8 @@ class Figs(partsat.DeltaField):
         pl.figure(2)
         h = np.where(self.Dchl<-0.5, 1, 0)
         fld = np.sum(h, axis=0).astype(np.float) / np.nansum(self.Dchl*0+1,0)
-        self.pcolor(miv(fld*100), oneside=True)
-        pl.clim(0,25)
+        self.pcolor(-miv(fld*100), oneside="neg")
+        pl.clim(-25,0)
         pl.title('Percent observations where Dchl < -0.5 mg $m^{-3}$')
         pl.savefig('figs/liege/freqmap_neg_Dchl.pdf')
 
@@ -92,8 +93,8 @@ class Figs(partsat.DeltaField):
         pl.figure(4)
         h = np.where(self.Dsst<-0.4, 1, 0)
         fld = np.sum(h, axis=0).astype(np.float) / np.nansum(self.Dsst*0+1,0)
-        self.pcolor(miv(fld*100), oneside=True)
-        pl.clim(0,25)
+        self.pcolor(-miv(fld*100), oneside="neg")
+        pl.clim(-25,0)
         pl.title('Percent observations where Dsst < -0.4 $\degree$C')
         pl.savefig('figs/liege/freqmap_neg_Dsst.pdf')
 
