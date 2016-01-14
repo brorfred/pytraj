@@ -4,12 +4,16 @@ import ConfigParser, json
 import numpy as np
 import pylab as pl
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
-try:
-    import anim
-    USE_ANIM = True
-except:
-    USE_ANIM = False
+import matplotlib.animation as animation
+
+#try:    
+from njord.utils import anim
+USE_ANIM = True
+#except:
+#    USE_ANIM = False
 
 
     
@@ -96,6 +100,13 @@ class Traj(object):
         bFunc.__name__ = aFunc.__name__
         bFunc.__doc__ = aFunc.__doc__
         return bFunc
+
+
+    def select(self, jd=None, ntrac=None, x1=None, x2=None, y1=None, y2=None,
+               z1=None, z2=None, lat1=None, lat2=None, lon1=None, lon2=None):
+        print "This function insn't implemented yet."
+        
+    
 
     def add_mp(self, map_region=None):
         if map_region is not None:
@@ -219,16 +230,17 @@ class Traj(object):
 
     @trajsloaded
     def scatter(self,mask=None, ntrac=None, jd=None, k1=None, k2=None,
-                c="g", lc='-w', lw='0.5', clf=True, coord="latlon", 
+                c="g", alpha=1, lc='-w', lw='0.5', clf=True, coord="latlon", 
                 land="nice", map_region=None):
         """Plot particle positions on a map
                  
-                 mask: Boolean vector inidcating which particles to plot
+                 mask: Boolean vector determining which particles to plot
                 ntrac: Particle ID
                    jd: Julian date to plot, has to be included in jdvec.
                    k1: only plot particle deeper than k1
                    k2: only plot particle shallower than k1
-                    c: color of particles
+                    c: color of particles (string or array)
+                alpha: transparancy of particles
                   clf: Clear figure  if True
                 coord: Use lat-lon coordinates if set to "latlon" (default),
                            i-j coordinates if set to "ij" 
@@ -237,10 +249,6 @@ class Traj(object):
            map_region: Use other map_regions than set by config file
 
         """
-        if (not hasattr(self,'mp'))  & (coord=="latlon"):
-            self.add_mp(map_region)
-        if (not hasattr(self,'lon')) & (coord=="latlon"):
-            self.ijll()
         if mask is None:
             mask = self.ntrac==self.ntrac
             if jd is not None:
@@ -248,15 +256,36 @@ class Traj(object):
             if ntrac is not None:
                 mask = mask & (self.ntrac==ntrac)
 
-        if USE_FIGPREF: figpref.current()
-        if clf: pl.clf()
-    
+        if (type(c) != str) & (len(c) == len(mask)):
+            c = c[mask]
+
+        if USE_FIGPREF:
+            figpref.current()
+        if clf:
+            pl.clf()
+
+
+        """
         if coord is "latlon":
             x,y = self.mp(self.lon[mask],self.lat[mask])
-            scH = self.mp.scatter(x, y, 5, c, lw=0)
+            scH = self.mp.scatter(x, y, 5, c, lw=0, alpha=alpha)
         else:
-            scH = pl.scatter(self.x[mask], self.y[mask], 5, c,lw=0)
-    
+            scH = pl.scatter(self.x[mask],self.y[mask], 5, c,lw=0, alpha=alpha)
+        """
+
+        if coord is "latlon":
+            if (not hasattr(self,'mp'))  & (coord=="latlon"):
+                self.add_mp(map_region)
+            if (not hasattr(self,'lon')) & (coord=="latlon"):
+                self.ijll()
+            xvec,yvec = self.mp(self.lon[mask], self.lat[mask])
+            scatter = self.mp.scatter
+        else:
+            xvec,yvec = self.x[mask],self.y[mask]
+            scatter = pl.scatter
+        scH = mp.scatter(xvec, yvec, 5, c, lw=0, alpha=alpha)
+
+            
         if land is "nice":
             land = self.gcm.mp.nice()
         elif coord is "latlon":
@@ -287,7 +316,7 @@ class Traj(object):
         return scH
         
     @trajsloaded
-    def movie(self,di=10, coord='latlon',land="nice"):        
+    def oldmovie(self,di=10, coord='latlon',land="nice"):        
         mv = anim.Movie()
         jdvec = np.sort(self.jdvec)
         for jd in jdvec:
@@ -297,6 +326,35 @@ class Traj(object):
                 self.scatter(jd=jd, coord=coord, land=land)
                 mv.image()
         mv.video(self.projname+self.casename+"_mov.mp4")
+
+        
+    def movie(self,di=10, coord='latlon',land="nice", heatmap=False):
+        curr_backend = plt.get_backend()
+        plt.switch_backend('Agg')
+
+        FFMpegWriter = animation.writers['ffmpeg']
+        metadata = dict(title='%s %s' % (self.projname, self.casename),
+                        artist='pytraj',
+                        comment='https://github.com/TRACMASS/pytraj')
+        writer = FFMpegWriter(fps=15, metadata=metadata)
+
+        fig = plt.figure()
+        with writer.saving(fig, "traj_test.mp4", 200):
+            for part in self.partvec:
+                self.load(part=part)
+                jdvec = np.sort(self.jdvec)                
+                for jd in jdvec:
+                    print part, jdvec[-1] - jd, len(self.jd[self.jd==jd])
+                    if len(self.jd[self.jd==jd]) <= 1: continue
+                    if jd/di == float(jd)/di:
+                        if heatmap == True:
+                            self.heatmap(log=True, jd=jd)
+                        else:
+                            self.scatter(jd=jd, coord=coord, land=land)
+                        writer.grab_frame()
+        plt.switch_backend(curr_backend)
+
+
 
     @trajsloaded
     def double_movie(tr1,tr2,di=10):
@@ -330,16 +388,61 @@ class Traj(object):
                                'x':     self.x,
                                'y':     self.y})
 
-    def heatmat(self):
+    def heatmat(self, nan=True, maskvec=None, jd=None):
         """Create a GCM grid with number of particels from x,y vectors"""
-        ind = np.ravel_multi_index(np.vstack((self.y.astype(int),
-                                              self.x.astype(int))),
-                                   (self.jmt, self.imt))
-        mat = self.llon * 0
+        if maskvec is None:
+            ind = np.ravel_multi_index(np.vstack((self.y.astype(int),
+                                                  self.x.astype(int))),
+                                       (self.jmt, self.imt))
+        else:
+            ind = np.ravel_multi_index(np.vstack((self.y[maskvec].astype(int),
+                                                  self.x[maskvec].astype(int))),
+                                       (self.jmt, self.imt))           
+        mat = self.llon * np.nan if nan else self.llon * 0
         mat.flat[:] = np.bincount(ind, minlength=self.imt * self.jmt)
         return mat
     
 
+    @trajsloaded
+    def heatmap(self, maskvec=None, jd=None, cmap=None, alpha=1, colorbar=True,
+                clf=True, map_region=None, log=False, kwargs={}):
+        """Plot particle positions on a map
+                 
+                 mask: Boolean vector determining which particles to plot
+                ntrac: Particle ID
+                   jd: Julian date to plot, has to be included in jdvec.
+                 cmap: color map to use
+                alpha: transparancy of pcolormap
+                  clf: Clear figure if True
+             colorbar: Show colorbar if True (default)
+           map_region: Use other map_regions than set by config file
+               kwargs: Other arguments to pcolor (must be a dict).
+        """
+        if maskvec is None:
+            maskvec = self.ntrac==self.ntrac
+        if jd is not None:
+            maskvec = maskvec & (self.jd==jd)
+
+        if USE_FIGPREF:
+            figpref.current()
+        if clf:
+            pl.clf()
+
+        if cmap is not None:
+            kwargs['cmap'] = cmap
+        if log is True:
+            kwargs['norm'] = LogNorm()
+        if colorbar is True:
+            kwargs['colorbar'] = True
+        mat = self.heatmat(nan=True, maskvec=maskvec, jd=None)
+        mat[mat==0] = np.nan
+        self.gcm.pcolor(mat, **kwargs)
+        if jd: pl.title(pl.num2date(jd).strftime("%Y-%m-%d %H:%M"))
+
+
+
+
+    
     def zip(self,xarr,yarr):
         """
         Transform data in a ziplike fashion. Matrices will be flatten with ravel 
