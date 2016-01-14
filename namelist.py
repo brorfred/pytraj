@@ -1,16 +1,22 @@
 import exceptions
+import re
+
 
 import numpy as np
-import pylab as pl
 
-def duck (s):
+def duck (instr):
+    if "," in instr:
+        try:
+            return [float(s) for s in instr.split(',')]
+        except:
+            return instr.strip("'")
     try:
-        return int(s)
+        return int(instr)
     except exceptions.ValueError:
         try:
-            return float(s)
+            return float(instr)
         except exceptions.ValueError:
-            return s.strip("'")
+            return instr.strip("'")
 
 def parse(filename):
     class struct:
@@ -28,8 +34,25 @@ def parse(filename):
                 var,arg = cmd.split("=")
                 arg = arg.strip().rstrip(',').rstrip('/')
                 var = var.strip()
-                struct.__dict__[curstr][var] = duck(arg)
-                struct.__dict__[var] = duck(arg)
+                if "(" and ")" in var:
+                    ind = int(var[var.index("(") + 1:var.rindex(")")])
+                    listvar = var.split('(')[0].strip()
+                    if not listvar in struct.__dict__:
+                        setattr(struct,listvar,defaultlist())
+                    struct.__dict__[listvar][ind] = duck(arg)
+                    struct.__dict__[curstr][listvar] = struct.__dict__[listvar]
+                else:
+                    struct.__dict__[curstr][var] = duck(arg)
+                    setattr(struct, var,duck(arg))
 
     return struct
 
+
+class defaultlist(list):
+
+   def __setitem__(self, index, value):
+      size = len(self)
+      if index >= size:
+         self.extend(0 for _ in range(size, index + 1))
+
+      list.__setitem__(self, index, value)
