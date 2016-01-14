@@ -1,3 +1,11 @@
+"""trm - a module to post-process output from TRACMASS""
+
+This module simplifies reading and analysis of data genereated by the TRACMASS
+off-line perticle tracking code (http://tracmass.org). The module also 
+includes functionality to generate seed files to be used when a specific
+region is seeded in TRACMASS. 
+"""
+
 import datetime
 from datetime import datetime as dtm
 import glob
@@ -10,6 +18,7 @@ import warnings
 import numpy as np
 import pylab as pl
 import matplotlib as mpl
+import pandas as pd
 
 from traj import Traj
 
@@ -23,13 +32,6 @@ def isint(str):
     except ValueError:
         return False
 
-"""trm - a module to post-process output from TRACMASS""
-
-This module simplifies reading and analysis of data genereated by the TRACMASS
-off-line perticle tracking code (http://tracmass.org). The module also 
-includes functionality to generate seed files to be used when a specific
-region should be seeded by TRACMASS. 
-"""
 class Trm(Traj):
     """Class for TRACMASS specific functionalily
          Usage:
@@ -75,7 +77,20 @@ class Trm(Traj):
         if not hasattr(self, "ftype"):
             ftype = ['xxx','asc','bin','csv']
             self.ftype = ftype[self.nlrun.twritetype]
-            
+
+        self._generate_datadir(kwargs)
+
+        self.base_iso = pl.date2num(dtm(
+            self.nlgrid.baseyear,
+            self.nlgrid.basemon,
+            self.nlgrid.baseday))-1
+        self.imt = self.nlgrid.imt
+        self.jmt = self.nlgrid.jmt
+
+        self.gen_filelists()
+
+    def _generate_datadir(self, kwargs):
+        """Generate datadir string based on info from nlist"""
         if not hasattr(self, 'datadir'):                
             if len(self.nlrun.outdatadir) > 0:
                 self.datadir = self.nlrun.outdatadir
@@ -87,10 +102,10 @@ class Trm(Traj):
             if not os.path.isabs(self.datadir):
                 self.datadir = os.path.join(self.trmdir, self.datadir)
 
-        if getattr(self.nlrun, "outdircase", False):
+        if getattr(self.nlrun, "outdircase", True):
             self.datadir = os.path.join(self.datadir, self.casename)
 
-        if getattr(self.nlrun, "outdirdate", False):
+        if getattr(self.nlrun, "outdirdate", True):
             if type(kwargs.get('startdate')) is float:
                 self.jdstart = kwargs['startdate']
             elif type(kwargs.get('startdate')) is int:
@@ -99,27 +114,22 @@ class Trm(Traj):
                 self.jdstart = pl.datestr2num(kwargs['startdate'])
             else:
                 self.jdstart = pl.datestr2num("%04i%02i%02i-%02i%02i" % (
-                    self.nlrun.startyear, self.nlrun.startmon, self.nlrun.startday,
-                    self.nlrun.starthour, self.nlrun.startmin))
+                    self.nlrun.startyear, self.nlrun.startmon,
+                    self.nlrun.startday,  self.nlrun.starthour,
+                    self.nlrun.startmin))
             self.outdirdatestr = pl.num2date(self.jdstart).strftime("%Y%m%d-%H%M")
             self.datadir = os.path.join(self.datadir, self.outdirdatestr)
         else:
             self.outdirdatestr = ""
             
         if self.nlrun.outdatafile:
-            self.datafilepref = os.path.join(self.datadir, self.nlrun.outdatafile)
+            self.datafilepref = os.path.join(self.datadir,
+                                             self.nlrun.outdatafile)
         else:
             self.datafilepref = os.path.join(self.datadir, self.casename)
                 
-        self.base_iso = pl.date2num(dtm(
-            self.nlgrid.baseyear,
-            self.nlgrid.basemon,
-            self.nlgrid.baseday))-1
-        self.imt = self.nlgrid.imt
-        self.jmt = self.nlgrid.jmt
 
-        self.gen_filelists()
-
+        
     @property
     def dtype(self):
         return np.dtype([('ntrac','i4'), ('ints','f8'), 
@@ -128,13 +138,11 @@ class Trm(Traj):
     def readfile(self, filename, count=-1):
         """Read  output from TRACMASS"""
         if filename[-3:] == "bin":
-            runtraj = np.fromfile(open(filename), self.dtype, count=count)
+            return np.fromfile(open(filename), self.dtype, count=count)
         elif filename[-3:] == "asc":
-            return np.genfromtxt(filename, self.dtype)
+            return np.genfromtxt(filename, self.trm_dtype)
         else:
             raise IOError, "Unknown file format, file should be bin or asc"
-       
-        return runtraj
         
     def read_jdrange(self, filename):
         """Read last record in binary file"""
@@ -149,60 +157,75 @@ class Trm(Traj):
                 self.jdrange =  self.lastjd - self.firstjd + 1
             except:
                 self.firstjd = self.lastjd = self.jdrange = 0
-                
+
     def load(self, filename=None, ftype=None, stype=None, part=None, rank=None,
              jdstart=0, intstart=0, rawdata=False, absntrac=True,
              partappend=True, rankappend=True, verbose=False, dryrun=False):
-        """Load a tracmass output file. Add data to class instance."""
+        """Load  TRACMASS output.
+             
+           Load one or more files genreated by TRACMASS and add the data
+           to the class instance as the ints,ntrac,x,y,z attributes.
+                 Create lists of output files connected to current case filtered by 
+         different selections. 
+
+         parameters:
+         -----------
+         filename : Filename to read. All parts and ranks are appended by default.
+         ftype    : Type of data - (ini,kll,out,run) run is implicitly default
+         stype    : File type (bin,asc,csv) normally set by the namelist. 
+         part     : Partfile to read. Overrides partappend=True
+         rank     : Rankfile to read. Overrides rankappend=True
+         """
+
         def vprint(str):
             if verbose == True:
                 print(str)
-        filename = self.currfile if filename is None else filename
-        ftype = filename[-7:-4] if ftype is None else ftype
-        stype = filename[-3:]   if stype is None else stype
+                
+        self.intstart = intstart
+        self.filename = self.currfile if filename is None else filename
+        ftype = self.filename[-7:-4] if ftype is None else ftype
+        stype = self.filename[-3:]   if stype is None else stype
         if partappend is False and part is None:
             part = self.parse_filename(filename)['part']
         if rankappend is False and rank is None:
             rank = self.parse_filename(filename)['rank']
         self.gen_filelists(rank=rank, part=part)
         
-        filelist = getattr(self, ftype + "files")  
-        runtraj = np.array([], dtype=self.dtype)
+        filelist = getattr(self, ftype + "files")
+        runtrajlist = []
         if len(filelist) > 1:
             vprint ("Number of files: %i" % len(filelist) )
-        for fname in filelist:
-            vprint (fname)
+        for n,fname in enumerate(filelist):
+            vprint ("%s (%i/%i)" % (os.path.basename(fname), n+1, len(filelist)))
             if dryrun is False: 
-                rtr = self.readfile(fname)
+                runtraj = self.readfile(fname)
                 if absntrac == True:
-                    rtr['ntrac'] = rtr['ntrac'] + self.rankntrac0[
-                        self.parse_filename(fname)['rank']]
-                runtraj = np.concatenate((runtraj, rtr))                    
-        self.gen_filelists()
-        self.filename = filename
-        self.intstart = intstart
-        if rawdata is True: self.runtraj = runtraj
-        self.process_runtraj(runtraj)
+                    ntrac0 = self.rankntrac0[self.parse_filename(fname)['rank']]
+                    runtraj['ntrac'] = runtraj['ntrac'] + ntrac0
+                runtrajlist.append(runtraj)
+        runtraj = np.concatenate(runtrajlist)
+        if len(runtraj) > 0:
+            if runtraj['x'].max() >= self.imt + 1:
+                runtraj = runtraj[runtraj['x'] < self.imt + 1]
+                np.warnings.warn("X positions outside grid")
+            if runtraj['y'].max() >= self.jmt + 1:
+                runtraj = runtraj[runtraj['y'] < self.jmt + 1]
+                np.warnings.warn("Y positions outside grid")        
+        if rawdata is True:
+            self.runtraj = runtraj
+        else:
+            self.process_runtraj(runtraj)
             
-    def process_runtraj(self, runtraj):
-        tvec = ['ntrac', 'ints', 'x', 'y', 'z']
-        for tv in tvec:
-            self.__dict__[tv] = runtraj[:][tv]
+    def process_runtraj(self, runtraj, df=False):
+        if isinstance(runtraj, pd.DataFrame):
+            for key in runtraj.columns:
+                setattr(self, key,runtraj[key].values)
+        else:
+            tvec = ['ntrac', 'ints', 'x', 'y', 'z']
+            for tv in tvec:
+                setattr(self, tv, runtraj[tv])
         self.x = self.x - 1
-        self.y = self.y - 1
-
-        if self.x.max() > self.imt:
-            mask = self.x < self.imt
-            for tv in tvec:
-                setattr(self, tv, getattr(self, tv)[mask])
-            np.warnings.warn("X positions outside grid")
-        if self.y.max() > self.jmt:
-            mask = self.y < self.jmt
-            for tv in tvec:
-                setattr(self, tv, getattr(self, tv)[mask])
-            np.warnings.warn("Y positions outside grid")
-
-        
+        self.y = self.y - 1        
         self.x[self.x<0] = self.x[self.x<0] + self.imt
         if hasattr(self.gcm,'gmt') & (self.nogmt is False):
             pos = self.imt - self.gcm.gmt.gmtpos
@@ -212,14 +235,19 @@ class Trm(Traj):
             self.x[x2] = self.x[x2] - pos
         self.x[self.x==self.imt] = self.x.min()
         if not hasattr(self.nlrun, 'twritetype'):
-            self.jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
+            jd = (self.ints * self.nlgrid.ngcm/24. +self.base_iso) 
         elif self.nlrun.twritetype == 1:
-            self.jd = (self.ints.astype(float)/60/60/24 + self.base_iso)
+            jd = (self.ints.astype(float)/60/60/24 + self.base_iso)
         elif self.nlrun.twritetype == 2:
-            self.jd = (self.ints + self.base_iso)
+            jd = (self.ints + self.base_iso)
         else:
             raise KeyError, "Unknown twritetype, chek the run namelist"
-        self.jdvec = np.unique(self.jd)
+        self.jdvec = np.unique(jd)
+        if isinstance(runtraj, pd.DataFrame):
+            runtraj['jd'] = jd
+            self.jd = runtraj.jd.values
+        else:
+            self.jd = jd
         if hasattr(self,'lon'): self.ijll()
 
     @Traj.trajsloaded
@@ -379,11 +407,14 @@ class Trm(Traj):
          """
         ftypelist = ['run',   'err',  'ini',  'out',  'kll']
         self._argdict.update(kwargs)
+        if not hasattr(self, "runfiles"):
+            for tp in ftypelist:
+                flist = glob.glob("%s/%s*_%s.%s"%
+                                (self.datadir, self.filepref, tp, self.ftype))
+                setattr(self, "_" + tp + "files", flist)
         for tp in ftypelist:
-            flist = glob.glob("%s/%s*_%s.%s"%
-                        (self.datadir, self.filepref, tp, self.ftype))
-            self.__dict__[tp + "files"] = flist
-
+            setattr(self, tp + "files", getattr(self, "_" + tp + "files"))
+        
         self.filedict = {}
         tmpdict = {a:[] for a in self._arglist}
         for f in self.runfiles:
@@ -497,3 +528,11 @@ class Trm(Traj):
             print "%s : %i" % ("positions".rjust(15), len(self.ntrac))
 
         return ''
+
+
+def timit():
+    gl = Trm('ecco025','full',  startdate="20070701")
+    gl.load(part=1, rank=6, rawdata=True)
+
+if __name__ == "__main__":
+    timit()
